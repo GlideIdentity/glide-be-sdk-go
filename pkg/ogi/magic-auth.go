@@ -1,14 +1,19 @@
 package ogi
 
 import (
-  "fmt"
+	"bytes"
+	"errors"
+	"fmt"
 
-  "github.com/opensaucerer/goaxios"
-  
-"encoding/json"
-"net/http"
-"net/http/cookiejar"
-  log "github.com/sirupsen/logrus"
+	"github.com/opensaucerer/goaxios"
+
+	"encoding/json"
+	"net/http"
+	"net/http/cookiejar"
+
+	"github.com/golang-jwt/jwt/v4"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type StartVerificationDto struct {
@@ -23,6 +28,12 @@ type StartVerificationResponseDto struct {
 }
 
 type VerificationType string
+
+type CheckCodeDto struct {
+	PhoneNumber string `json:"phoneNumber"`
+	Email string `json:"email"`
+	Code string `json:"code"`
+}
 
 const (
   MAGIC VerificationType = "MAGIC"
@@ -44,7 +55,7 @@ func (c *GlideClient) MagicAuth(startVerificationDto *StartVerificationDto) (*St
 	client := &http.Client{
 		Jar: jar,
 	}
-	data, err := json.Marshal(dto)
+	data, err := json.Marshal(startVerificationDto)
 	if err != nil {
 		return nil, err
 	}
@@ -66,17 +77,14 @@ func (c *GlideClient) MagicAuth(startVerificationDto *StartVerificationDto) (*St
 	defer res.Body.Close()
   
 	if res.StatusCode != http.StatusOK {
+		log.Errorf("Error during authentication request: status code %d", res.StatusCode)
 		return nil, fmt.Errorf("error during authentication request: status code %d", res.StatusCode)
 	}
 
 	var resData StartVerificationResponseDto
 	if err := json.NewDecoder(res.Body).Decode(&resData); err != nil {
+		log.Errorf("Error parsing verification response: %+v", err)
 		return nil, err
-	}
-
-	if !ok {
-	  log.Errorf("Error parsing verification response: %+v", res.Error)
-	  return nil, fmt.Errorf("error parsing verification response")
 	}
   
 	// Follow up by requesting to verify the token using the provided auth URL if necessary.
@@ -103,7 +111,7 @@ func (c *GlideClient) MagicAuth(startVerificationDto *StartVerificationDto) (*St
 		}
 	
 		// Parse without validating the signature
-		token, _, err := jwt.ParseUnverified(jwtString, jwt.MapClaims{})
+		token, _, err := new(jwt.Parser).ParseUnverified(jwtString, jwt.MapClaims{})
 		if err != nil {
 			return nil, fmt.Errorf("error parsing token: %v", err)
 		}
@@ -136,7 +144,6 @@ func (c *GlideClient) MagicAuth(startVerificationDto *StartVerificationDto) (*St
 	  Headers: map[string]string{
 		"Content-Type": "application/json",
 	  },
-	  BearerToken: authRes.Session.AccessToken,
 	  Body: checkCodeDto,
 	}
   
@@ -146,11 +153,11 @@ func (c *GlideClient) MagicAuth(startVerificationDto *StartVerificationDto) (*St
 	  return false, res.Error
 	}
   
-	resData, ok := res.Body.(map[string]interface{})
+	resData, ok := res.Body.(bool)
 	if !ok {
 	  log.Errorf("Error parsing token verification response: %+v", res.Error)
 	  return false, fmt.Errorf("error parsing token verification response")
 	}
   
-	return resData.(bool), nil
+	return resData, nil
   }
