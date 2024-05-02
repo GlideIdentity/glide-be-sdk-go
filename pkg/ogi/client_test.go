@@ -121,3 +121,48 @@ func TestVerifyLocation(t *testing.T) {
 		t.Fatalf("Location is not valid")
 	}
 }
+
+func TestMagicAuth(t *testing.T) {
+	setupClient()
+  
+	startVerificationDto := &ogi.StartVerificationDto{
+	  PhoneNumber: testPhoneNumber,
+	  Email: "",
+	  FallbackChannel: "SMS",
+	}
+  
+	res, err := client.MagicAuth(startVerificationDto)
+  
+	if err != nil {
+	  t.Fatalf("Error starting verification: %+v", err)
+	}
+  
+	if res == nil {
+	  t.Fatalf("Response is nil")
+	}
+  
+	if res.Type != ogi.MAGIC {
+	  t.Fatalf("Verification type is incorrect")
+	}
+  }
+  
+  func TestVerifyToken(t *testing.T) {
+	setupClient()
+  
+	checkCodeDto := &ogi.CheckCodeDto{
+	  PhoneNumber: testPhoneNumber,
+	  Email: "",
+	  Code: "123456",
+	}
+  
+	valid, err := client.VerifyToken(checkCodeDto)
+  
+	if err != nil {
+	  t.Fatalf("Error verifying token: %+v", err)
+	}
+  
+	if !valid {
+	  t.Fatalf("Token is not valid")
+	}
+  }
+  
