@@ -86,41 +86,37 @@ func (c *GlideClient) MagicAuth(startVerificationDto *StartVerificationDto) (*St
 			log.Errorf("Error starting magic auth: %v", err)
 			return nil, err
 		}
-
+	
 		authRes, err := client.Do(authReq)
 		if err != nil {
 			return nil, err
 		}
 		defer authRes.Body.Close()
-
+	
 		if authRes.StatusCode != http.StatusOK {
 			return nil, fmt.Errorf("failed to verify auth token: status code %d", authRes.StatusCode)
 		}
-
+	
 		var jwtString string
 		if err := json.NewDecoder(authRes.Body).Decode(&jwtString); err != nil {
 			return nil, err
 		}
-
-		token, err := jwt.Parse(jwtString, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-			}
-			return []byte(envConfig.JWTSecret), nil // The secret should be stored securely.
-		})
-
+	
+		// Parse without validating the signature
+		token, _, err := jwt.ParseUnverified(jwtString, jwt.MapClaims{})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error parsing token: %v", err)
 		}
-
-		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-			if iss, ok := claims["iss"].(string); !ok || iss != envConfig.InternalApiBaseUrl {
-				return nil, errors.New("invalid jwt issuer")
-			}
-		} else {
-			return nil, errors.New("invalid jwt token")
+	
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			return nil, errors.New("error asserting claims")
 		}
-
+	
+		if iss, ok := claims["iss"].(string); !ok || iss != envConfig.InternalApiBaseUrl {
+			return nil, fmt.Errorf("invalid jwt issuer: expected %v got %v", envConfig.InternalApiBaseUrl, claims["iss"])
+		}
+	
 		// Upon successful verification, update the DTO to reflect this.
 		resData.Type = MAGIC
 	}
