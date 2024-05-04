@@ -19,7 +19,7 @@ func setupMagicAuth() {
 		panic(err)
 	}
 
-    testPhoneNumber = os.Getenv("GLIDE_TEST_PHONE_NUMBER")
+	testPhoneNumber = os.Getenv("GLIDE_TEST_PHONE_NUMBER")
 }
 
 func TestMagicAuth(t *testing.T) {
@@ -63,7 +63,7 @@ func TestMagicAuthCheckCode(t *testing.T) {
 
 	res, err := magicAuth.CheckCode(&ogi.CheckCodeDto{
 		PhoneNumber: testPhoneNumber,
-		Code: "981673",
+		Code:        "981673",
 	})
 
 	if err != nil {
