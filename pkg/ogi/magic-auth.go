@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/opensaucerer/goaxios"
 
 	"encoding/json"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 
 	"github.com/golang-jwt/jwt/v4"
 
@@ -17,14 +19,15 @@ import (
 )
 
 type StartVerificationDto struct {
-  PhoneNumber string `json:"phoneNumber"`
-  Email string `json:"email"`
-  FallbackChannel string `json:"fallbackChannel"`
+	PhoneNumber string `json:"phoneNumber"`
+	Email string `json:"email"`
+	FallbackChannel string `json:"fallbackChannel"`
 }
-
+  
 type StartVerificationResponseDto struct {
-  Type VerificationType `json:"type"`
-  AuthUrl string `json:"authUrl"`
+	Type VerificationType `json:"type"`
+	AuthUrl string `json:"authUrl"`
+	Verified bool `json:"verified"`
 }
 
 type VerificationType string
@@ -36,12 +39,54 @@ type CheckCodeDto struct {
 }
 
 const (
-  MAGIC VerificationType = "MAGIC"
-  SMS VerificationType = "SMS"
-  EMAIL VerificationType = "EMAIL"
+	MAGIC VerificationType = "MAGIC"
+	SMS VerificationType = "SMS"
+	EMAIL VerificationType = "EMAIL"
 )
+  
+type MagicAuth struct {
+}
 
-func (c *GlideClient) MagicAuth(startVerificationDto *StartVerificationDto) (*StartVerificationResponseDto, error) {
+func init() {
+	logLevel := log.ErrorLevel
+
+	logLevelEnv, logLevelSet := os.LookupEnv("LOG_LEVEL")
+	if logLevelSet {
+		switch logLevelEnv {
+		case "debug":
+			logLevel = log.DebugLevel
+		case "info":
+			logLevel = log.InfoLevel
+		case "warn":
+			logLevel = log.WarnLevel
+		case "error":
+			logLevel = log.ErrorLevel
+		default:
+			logLevel = log.ErrorLevel
+		}
+	}
+
+	log.SetLevel(logLevel)
+}
+
+
+func NewMagicAuth() (*MagicAuth, error) {
+	// parse client id, client secret and base url from environment variables
+	env, err := ReadEnv()
+	if err != nil {
+		return nil, errors.New("failed to read environment variables: " + err.Error())
+	}
+
+	// validate base url
+	if _, err := url.ParseRequestURI(env.InternalApiBaseUrl); err != nil {
+		return nil, errors.New("invalid internal API base url: " + env.InternalApiBaseUrl)
+	}
+
+	return &MagicAuth{
+	}, nil
+}
+
+func (c *MagicAuth) Authenticate(startVerificationDto *StartVerificationDto) (*StartVerificationResponseDto, error) {
 	envConfig, err := ReadEnv()
 	if err != nil {
 	  return nil, err
@@ -55,7 +100,11 @@ func (c *GlideClient) MagicAuth(startVerificationDto *StartVerificationDto) (*St
 	client := &http.Client{
 		Jar: jar,
 	}
-	data, err := json.Marshal(startVerificationDto)
+	data, err := json.Marshal(&StartVerificationDto{
+		PhoneNumber: FormatPhoneNumber(startVerificationDto.PhoneNumber),
+		Email: startVerificationDto.Email,
+		FallbackChannel: startVerificationDto.FallbackChannel,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +159,6 @@ func (c *GlideClient) MagicAuth(startVerificationDto *StartVerificationDto) (*St
 			return nil, err
 		}
 	
-		// Parse without validating the signature
 		token, _, err := new(jwt.Parser).ParseUnverified(jwtString, jwt.MapClaims{})
 		if err != nil {
 			return nil, fmt.Errorf("error parsing token: %v", err)
@@ -125,14 +173,16 @@ func (c *GlideClient) MagicAuth(startVerificationDto *StartVerificationDto) (*St
 			return nil, fmt.Errorf("invalid jwt issuer: expected %v got %v", envConfig.InternalApiBaseUrl, claims["iss"])
 		}
 	
-		// Upon successful verification, update the DTO to reflect this.
-		resData.Type = MAGIC
+		return &StartVerificationResponseDto{
+			Type: resData.Type,
+			Verified: true,
+		}, nil
+	} else {
+		return &resData, nil
 	}
-  
-	return &resData, nil
   }
   
-  func (c *GlideClient) VerifyToken(checkCodeDto *CheckCodeDto) (bool, error) {
+  func (c *MagicAuth) CheckCode(checkCodeDto *CheckCodeDto) (bool, error) {
 	envConfig, err := ReadEnv()
 	if err != nil {
 	  return false, err
@@ -144,7 +194,11 @@ func (c *GlideClient) MagicAuth(startVerificationDto *StartVerificationDto) (*St
 	  Headers: map[string]string{
 		"Content-Type": "application/json",
 	  },
-	  Body: checkCodeDto,
+	  Body: &CheckCodeDto{
+		PhoneNumber: FormatPhoneNumber(checkCodeDto.PhoneNumber),
+		Email: checkCodeDto.Email,
+		Code: checkCodeDto.Code,
+	  },							
 	}
   
 	res := req.RunRest()
