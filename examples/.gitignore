@@ -1,0 +1,11 @@
+# Ignore compiled binaries
+phone-auth/phone-auth
+complete/complete
+
+# Ignore any compiled executables
+*.exe
+*.test
+*.out
+
+# OS files
+.DS_Store
