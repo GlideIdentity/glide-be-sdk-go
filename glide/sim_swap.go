@@ -49,7 +49,7 @@ func (s *simSwapService) Check(ctx context.Context, req *SimSwapCheckRequest) (*
 	// Parse response
 	var resp SimSwapCheckResponse
 	if err := json.Unmarshal(respData, &resp); err != nil {
-		return nil, NewError(ErrCodeUnexpectedError, "Failed to parse response")
+		return nil, NewError(ErrCodeInternalServerError, "Failed to parse response")
 	}
 
 	return &resp, nil
@@ -80,7 +80,7 @@ func (s *simSwapService) GetLastSwapDate(ctx context.Context, req *SimSwapDateRe
 	// Parse response
 	var resp SimSwapDateResponse
 	if err := json.Unmarshal(respData, &resp); err != nil {
-		return nil, NewError(ErrCodeUnexpectedError, "Failed to parse response")
+		return nil, NewError(ErrCodeInternalServerError, "Failed to parse response")
 	}
 
 	return &resp, nil

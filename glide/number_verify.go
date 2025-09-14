@@ -47,7 +47,7 @@ func (s *numberVerifyService) Verify(ctx context.Context, req *NumberVerifyReque
 	// Parse response
 	var resp NumberVerifyResponse
 	if err := json.Unmarshal(respData, &resp); err != nil {
-		return nil, NewError(ErrCodeUnexpectedError, "Failed to parse response")
+		return nil, NewError(ErrCodeInternalServerError, "Failed to parse response")
 	}
 
 	return &resp, nil

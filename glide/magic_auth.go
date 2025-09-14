@@ -50,7 +50,7 @@ func (s *magicAuthService) Prepare(ctx context.Context, req *PrepareRequest) (*P
 	// Parse response
 	var resp PrepareResponse
 	if err := json.Unmarshal(respData, &resp); err != nil {
-		return nil, NewError(ErrCodeUnexpectedError, "Failed to parse response")
+		return nil, NewError(ErrCodeInternalServerError, "Failed to parse response")
 	}
 
 	return &resp, nil
@@ -86,7 +86,7 @@ func (s *magicAuthService) ProcessCredential(ctx context.Context, req *ProcessRe
 	// Parse response
 	var resp ProcessResponse
 	if err := json.Unmarshal(respData, &resp); err != nil {
-		return nil, NewError(ErrCodeUnexpectedError, "Failed to parse response")
+		return nil, NewError(ErrCodeInternalServerError, "Failed to parse response")
 	}
 
 	return &resp, nil

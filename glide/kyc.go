@@ -75,7 +75,7 @@ func (s *kycService) Match(ctx context.Context, req *KYCMatchRequest) (*KYCMatch
 	// Parse response
 	var resp KYCMatchResponse
 	if err := json.Unmarshal(respData, &resp); err != nil {
-		return nil, NewError(ErrCodeUnexpectedError, "Failed to parse response")
+		return nil, NewError(ErrCodeInternalServerError, "Failed to parse response")
 	}
 
 	return &resp, nil

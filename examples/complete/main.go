@@ -235,7 +235,7 @@ func handleErrors() {
 			switch glideErr.Code {
 			case glide.ErrCodeCarrierNotEligible:
 				// Use alternative verification method
-			case glide.ErrCodeSessionExpired:
+			case glide.ErrCodeInvalidSessionState:
 				// Restart the flow
 			case glide.ErrCodeRateLimitExceeded:
 				// Wait and retry

@@ -170,7 +170,7 @@ func demonstrateErrorHandling(ctx context.Context, client *glide.Client) {
 			case glide.ErrCodeCarrierNotEligible:
 				fmt.Println("→ Fallback: Use alternative verification method")
 
-			case glide.ErrCodeSessionExpired:
+			case glide.ErrCodeInvalidSessionState:
 				fmt.Println("→ Action: Restart the authentication flow")
 
 			case glide.ErrCodeRateLimitExceeded:

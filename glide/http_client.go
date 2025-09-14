@@ -41,7 +41,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body interf
 			select {
 			case <-time.After(c.config.RetryDelay * time.Duration(attempt)):
 			case <-ctx.Done():
-				return nil, NewError(ErrCodeUnexpectedError, "Request cancelled")
+				return nil, NewError(ErrCodeInternalServerError, "Request cancelled")
 			}
 		}
 
@@ -82,7 +82,7 @@ func (c *Client) performRequest(ctx context.Context, method, path string, body i
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
-		return nil, NewError(ErrCodeUnexpectedError, "Failed to create request")
+		return nil, NewError(ErrCodeInternalServerError, "Failed to create request")
 	}
 
 	// Set headers
@@ -105,7 +105,7 @@ func (c *Client) performRequest(ctx context.Context, method, path string, body i
 	// Read response body
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, NewError(ErrCodeUnexpectedError, "Failed to read response body")
+		return nil, NewError(ErrCodeInternalServerError, "Failed to read response body")
 	}
 
 	// Check for errors
@@ -165,7 +165,7 @@ func (c *Client) genericErrorForStatus(status int) error {
 		if status >= 500 {
 			return NewErrorWithStatus(ErrCodeInternalServerError, "Server error occurred", status)
 		}
-		return NewErrorWithStatus(ErrCodeUnexpectedError, fmt.Sprintf("Unexpected status: %d", status), status)
+		return NewErrorWithStatus(ErrCodeInternalServerError, fmt.Sprintf("Unexpected status: %d", status), status)
 	}
 }
 
