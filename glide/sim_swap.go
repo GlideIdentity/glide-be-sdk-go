@@ -21,11 +21,12 @@ func newSimSwapService(client *Client) SimSwapService {
 func (s *simSwapService) Check(ctx context.Context, req *SimSwapCheckRequest) (*SimSwapCheckResponse, error) {
 	// Validate request
 	if req.PhoneNumber == "" {
-		return nil, NewError(ErrCodeInvalidParameters, "Phone number is required")
+		return nil, NewError(ErrCodeMissingParameters, "Phone number is required")
 	}
 
-	if !isValidE164(req.PhoneNumber) {
-		return nil, NewError(ErrCodeInvalidParameters, "Phone number must be in E.164 format")
+	// Validate phone number format
+	if err := ValidatePhoneNumber(req.PhoneNumber); err != nil {
+		return nil, err
 	}
 
 	// Default max age to 24 hours if not specified
@@ -59,11 +60,12 @@ func (s *simSwapService) Check(ctx context.Context, req *SimSwapCheckRequest) (*
 func (s *simSwapService) GetLastSwapDate(ctx context.Context, req *SimSwapDateRequest) (*SimSwapDateResponse, error) {
 	// Validate request
 	if req.PhoneNumber == "" {
-		return nil, NewError(ErrCodeInvalidParameters, "Phone number is required")
+		return nil, NewError(ErrCodeMissingParameters, "Phone number is required")
 	}
 
-	if !isValidE164(req.PhoneNumber) {
-		return nil, NewError(ErrCodeInvalidParameters, "Phone number must be in E.164 format")
+	// Validate phone number format
+	if err := ValidatePhoneNumber(req.PhoneNumber); err != nil {
+		return nil, err
 	}
 
 	// Build API request

@@ -70,7 +70,7 @@ func verifyPhoneNumber(client *glide.Client) error {
 		return err
 	}
 
-	fmt.Printf("Authentication prepared with strategy: %s\n", prepareResp.Strategy)
+	fmt.Printf("Authentication prepared with strategy: %s\n", prepareResp.AuthenticationStrategy)
 	fmt.Printf("Session: %s\n", prepareResp.Session)
 
 	// Step 2: Client performs authentication (browser/app)
@@ -115,7 +115,7 @@ func getPhoneNumber(client *glide.Client) error {
 		return fmt.Errorf("prepare failed: %v", err)
 	}
 
-	fmt.Printf("Ready to get phone number with strategy: %s\n", prepareResp.Strategy)
+	fmt.Printf("Ready to get phone number with strategy: %s\n", prepareResp.AuthenticationStrategy)
 
 	// After client authentication...
 	credentialResponse := map[string]interface{}{

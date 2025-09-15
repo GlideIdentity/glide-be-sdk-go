@@ -63,10 +63,20 @@ func verifyPhoneNumber(ctx context.Context, client *glide.Client) error {
 	}
 
 	fmt.Printf("✅ Authentication prepared\n")
-	fmt.Printf("   Strategy: %s\n", prepareResp.Strategy)
+	fmt.Printf("   Strategy: %s\n", prepareResp.AuthenticationStrategy)
 	fmt.Printf("   Session: %s\n", prepareResp.Session)
 	if prepareResp.TTL > 0 {
 		fmt.Printf("   TTL: %d seconds\n", prepareResp.TTL)
+	}
+
+	// Check which strategy to use
+	switch prepareResp.AuthenticationStrategy {
+	case glide.AuthenticationStrategyTS43:
+		fmt.Println("   → Using TS43 (Digital Credentials API)")
+	case glide.AuthenticationStrategyLink:
+		fmt.Println("   → Using Link (Deep link/App clip)")
+	default:
+		fmt.Printf("   → Unknown strategy: %s\n", prepareResp.AuthenticationStrategy)
 	}
 
 	// Step 2: Client performs authentication (browser/app)
@@ -121,7 +131,7 @@ func getPhoneNumber(ctx context.Context, client *glide.Client) error {
 	}
 
 	fmt.Printf("✅ Ready to get phone number\n")
-	fmt.Printf("   Strategy: %s\n", prepareResp.Strategy)
+	fmt.Printf("   Strategy: %s\n", prepareResp.AuthenticationStrategy)
 	fmt.Printf("   Session: %s\n", prepareResp.Session)
 
 	// After client authentication...

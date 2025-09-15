@@ -34,8 +34,8 @@ type ConsentData struct {
 
 // PrepareResponse contains the authentication preparation result
 type PrepareResponse struct {
-	// Strategy indicates the authentication method (ts43 or link)
-	Strategy string `json:"strategy"`
+	// AuthenticationStrategy indicates the authentication method (ts43 or link)
+	AuthenticationStrategy AuthenticationStrategy `json:"authentication_strategy"`
 
 	// Session identifier for this authentication flow
 	Session string `json:"session"`

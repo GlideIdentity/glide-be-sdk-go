@@ -21,11 +21,12 @@ func newKYCService(client *Client) KYCService {
 func (s *kycService) Match(ctx context.Context, req *KYCMatchRequest) (*KYCMatchResponse, error) {
 	// Validate request
 	if req.PhoneNumber == "" {
-		return nil, NewError(ErrCodeInvalidParameters, "Phone number is required")
+		return nil, NewError(ErrCodeMissingParameters, "Phone number is required")
 	}
 
-	if !isValidE164(req.PhoneNumber) {
-		return nil, NewError(ErrCodeInvalidParameters, "Phone number must be in E.164 format")
+	// Validate phone number format
+	if err := ValidatePhoneNumber(req.PhoneNumber); err != nil {
+		return nil, err
 	}
 
 	// At least one field besides phone number should be provided for matching

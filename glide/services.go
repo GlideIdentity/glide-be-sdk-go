@@ -12,6 +12,14 @@ const (
 	UseCaseVerifyPhoneNumber UseCase = "VerifyPhoneNumber"
 )
 
+// AuthenticationStrategy represents the authentication method
+type AuthenticationStrategy string
+
+const (
+	AuthenticationStrategyTS43 AuthenticationStrategy = "ts43"
+	AuthenticationStrategyLink AuthenticationStrategy = "link"
+)
+
 // MagicAuthService handles SIM-based phone authentication
 type MagicAuthService interface {
 	// Prepare initiates the authentication flow

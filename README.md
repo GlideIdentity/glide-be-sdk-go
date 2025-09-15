@@ -69,6 +69,16 @@ See the [`examples/`](examples/) directory for complete working examples:
 ### Magic Auth
 SIM-based phone authentication using carrier verification.
 
+```go
+// Use case constants
+glide.UseCaseGetPhoneNumber    // "GetPhoneNumber"
+glide.UseCaseVerifyPhoneNumber // "VerifyPhoneNumber"
+
+// Authentication strategy constants
+glide.AuthenticationStrategyTS43 // "ts43" - Digital Credentials API
+glide.AuthenticationStrategyLink // "link" - Deep links/App clips
+```
+
 ### SIM Swap
 Detect recent SIM card changes for fraud prevention.
 

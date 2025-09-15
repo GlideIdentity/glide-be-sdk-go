@@ -94,54 +94,30 @@ func (s *magicAuthService) ProcessCredential(ctx context.Context, req *ProcessRe
 
 // validatePrepareRequest validates the prepare request
 func (s *magicAuthService) validatePrepareRequest(req *PrepareRequest) error {
-	// Must have either phone number or PLMN
-	if req.PhoneNumber == "" && req.PLMN == nil {
-		return NewError(ErrCodeInvalidParameters, "Either phone_number or PLMN is required")
-	}
-
 	// Validate use case
 	if req.UseCase != UseCaseGetPhoneNumber && req.UseCase != UseCaseVerifyPhoneNumber {
 		return NewError(ErrCodeInvalidParameters, "Invalid use case")
 	}
 
-	// VerifyPhoneNumber requires a phone number
-	if req.UseCase == UseCaseVerifyPhoneNumber && req.PhoneNumber == "" {
-		return NewError(ErrCodeInvalidParameters, "Phone number is required for VerifyPhoneNumber")
+	// Validate use case requirements first
+	if err := ValidateUseCaseRequirements(req.UseCase, req.PhoneNumber); err != nil {
+		return err
+	}
+
+	// Validate phone number if provided
+	if err := ValidatePhoneNumber(req.PhoneNumber); err != nil {
+		return err
 	}
 
 	// Validate PLMN if provided
-	if req.PLMN != nil {
-		if req.PLMN.MCC == "" || req.PLMN.MNC == "" {
-			return NewError(ErrCodeInvalidParameters, "Both MCC and MNC are required for PLMN")
-		}
+	if err := ValidatePLMN(req.PLMN); err != nil {
+		return err
 	}
 
-	// Validate phone number format if provided
-	if req.PhoneNumber != "" && !isValidE164(req.PhoneNumber) {
-		return NewError(ErrCodeInvalidParameters, "Phone number must be in E.164 format")
+	// Either phone number or PLMN must be provided
+	if req.PhoneNumber == "" && req.PLMN == nil {
+		return NewError(ErrCodeMissingParameters, "Either phone number or PLMN (MCC/MNC) must be provided")
 	}
 
 	return nil
-}
-
-// isValidE164 checks if a phone number is in E.164 format
-func isValidE164(phoneNumber string) bool {
-	// Basic E.164 validation
-	if len(phoneNumber) < 2 || phoneNumber[0] != '+' {
-		return false
-	}
-
-	// Check if rest are digits
-	for i := 1; i < len(phoneNumber); i++ {
-		if phoneNumber[i] < '0' || phoneNumber[i] > '9' {
-			return false
-		}
-	}
-
-	// E.164 numbers are max 15 digits (plus the +)
-	if len(phoneNumber) > 16 {
-		return false
-	}
-
-	return true
 }
