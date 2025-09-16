@@ -29,3 +29,5 @@ vendor/
 # Example binaries
 examples/phone-auth/phone-auth
 examples/complete/complete
+*.log
+test-server/test-server

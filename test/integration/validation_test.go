@@ -172,11 +172,14 @@ func TestUseCaseValidation(t *testing.T) {
 		t.Log("✅ Correctly requires PLMN for GetPhoneNumber")
 	})
 
-	t.Run("should allow GetPhoneNumber with PLMN only", func(t *testing.T) {
+	t.Run("should allow GetPhoneNumber without phone number if PLMN provided", func(t *testing.T) {
 		prepReq := glide.PrepareRequest{
 			UseCase: glide.UseCaseGetPhoneNumber,
 			PLMN:    &testPLMN.TMobileUS,
 			// No phone number - correct for GetPhoneNumber
+			ClientInfo: &glide.ClientInfo{
+				UserAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+			},
 		}
 
 		result, err := client.MagicAuth.Prepare(ctx, &prepReq)
@@ -191,7 +194,7 @@ func TestConsentDataValidation(t *testing.T) {
 	client := createTestClient(t)
 	ctx := context.Background()
 
-	t.Run("should reject consent data with missing fields", func(t *testing.T) {
+	t.Run("should reject consent data with missing required fields", func(t *testing.T) {
 		prepReq := glide.PrepareRequest{
 			UseCase: glide.UseCaseGetPhoneNumber,
 			PLMN:    &testPLMN.TMobileUS,
@@ -209,7 +212,7 @@ func TestConsentDataValidation(t *testing.T) {
 		t.Log("✅ Correctly rejected incomplete consent data")
 	})
 
-	t.Run("should reject consent data with invalid URL", func(t *testing.T) {
+	t.Run("should reject consent data with invalid URL format", func(t *testing.T) {
 		prepReq := glide.PrepareRequest{
 			UseCase: glide.UseCaseGetPhoneNumber,
 			PLMN:    &testPLMN.TMobileUS,

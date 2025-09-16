@@ -17,6 +17,9 @@ type PrepareRequest struct {
 
 	// ConsentData for user consent (optional)
 	ConsentData *ConsentData `json:"consent_data,omitempty"`
+
+	// ClientInfo contains client information like user agent
+	ClientInfo *ClientInfo `json:"client_info,omitempty"`
 }
 
 // PLMN represents the carrier network identifier
@@ -30,6 +33,12 @@ type ConsentData struct {
 	ConsentText string `json:"consent_text"`
 	PolicyLink  string `json:"policy_link"`
 	PolicyText  string `json:"policy_text,omitempty"`
+}
+
+// ClientInfo contains client information for strategy selection
+type ClientInfo struct {
+	UserAgent string `json:"user_agent,omitempty"`
+	Platform  string `json:"platform,omitempty"`
 }
 
 // PrepareResponse contains the authentication preparation result
@@ -89,36 +98,6 @@ type GetPhoneNumberRequest struct {
 type GetPhoneNumberResponse struct {
 	// PhoneNumber retrieved from the carrier
 	PhoneNumber string `json:"phone_number"`
-}
-
-// ProcessRequest processes the authentication credential
-// Deprecated: Use VerifyPhoneNumberRequest or GetPhoneNumberRequest instead
-type ProcessRequest struct {
-	// Session key from the prepare response (just the key, not the full SessionInfo)
-	Session string `json:"session"`
-
-	// Response from the client-side authentication
-	Response map[string]interface{} `json:"response"`
-
-	// Note: PhoneNumber is NOT needed here - the server already knows it from the session
-}
-
-// ProcessResponse contains the authentication result
-type ProcessResponse struct {
-	// PhoneNumber that was verified or retrieved
-	PhoneNumber string `json:"phone_number"`
-
-	// Verified indicates if the number was verified (for VerifyPhoneNumber)
-	Verified bool `json:"verified,omitempty"`
-
-	// Metadata contains additional information
-	Metadata *ProcessMetadata `json:"metadata,omitempty"`
-}
-
-// ProcessMetadata contains additional process information
-type ProcessMetadata struct {
-	VerifiedAt time.Time `json:"verified_at"`
-	SessionID  string    `json:"session_id,omitempty"`
 }
 
 // SimSwapCheckRequest checks for recent SIM swaps

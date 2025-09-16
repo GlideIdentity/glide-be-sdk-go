@@ -34,6 +34,9 @@ func TestDebugPrepareRequest(t *testing.T) {
 			UseCase: glide.UseCaseGetPhoneNumber,
 			PLMN:    &plmn,
 			// No phone number - we're trying to get it
+			ClientInfo: &glide.ClientInfo{
+				UserAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+			},
 		}
 
 		t.Logf("Request: %+v", prepReq)
@@ -49,8 +52,11 @@ func TestDebugPrepareRequest(t *testing.T) {
 	t.Run("verify_with_phone", func(t *testing.T) {
 		prepReq := glide.PrepareRequest{
 			UseCase:     glide.UseCaseVerifyPhoneNumber,
-			PhoneNumber: "+13105551234",
-			// PLMN optional - server uses TelcoFinder
+			PhoneNumber: "+14157400083", // T-Mobile number that TelcoFinder recognizes
+			// No PLMN needed - server uses TelcoFinder
+			ClientInfo: &glide.ClientInfo{
+				UserAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+			},
 		}
 
 		t.Logf("Request: %+v", prepReq)

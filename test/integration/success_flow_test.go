@@ -25,7 +25,7 @@ var (
 		WithSpaces    string
 		WithDashes    string
 	}{
-		TMobileValid:  "+13105551234",
+		TMobileValid:  "+14157400083",  // T-Mobile number verified with TelcoFinder
 		NonEligible:   "+972549982913", // Israeli number
 		InvalidFormat: "1234567890",
 		ShortNumber:   "+1234",
@@ -98,6 +98,9 @@ func TestGetPhoneNumberFlow(t *testing.T) {
 			UseCase: glide.UseCaseGetPhoneNumber,
 			// No phone number - we're trying to get it
 			PLMN: &testPLMN.TMobileUS,
+			ClientInfo: &glide.ClientInfo{
+				UserAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+			},
 		}
 
 		result, err := client.MagicAuth.Prepare(ctx, &prepReq)
@@ -122,6 +125,9 @@ func TestGetPhoneNumberFlow(t *testing.T) {
 				ConsentText: "I agree to the terms",
 				PolicyLink:  "https://example.com/privacy",
 				PolicyText:  "Privacy policy text",
+			},
+			ClientInfo: &glide.ClientInfo{
+				UserAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
 			},
 		}
 
@@ -170,7 +176,10 @@ func TestVerifyPhoneNumberFlow(t *testing.T) {
 		prepReq := glide.PrepareRequest{
 			UseCase:     glide.UseCaseVerifyPhoneNumber,
 			PhoneNumber: testPhoneNumbers.TMobileValid,
-			PLMN:        &testPLMN.TMobileUS, // Optional but helps identify carrier for test numbers
+			// No PLMN needed - server uses TelcoFinder with phone number
+			ClientInfo: &glide.ClientInfo{
+				UserAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+			},
 		}
 
 		result, err := client.MagicAuth.Prepare(ctx, &prepReq)
@@ -191,6 +200,9 @@ func TestPerformance(t *testing.T) {
 		prepReq := glide.PrepareRequest{
 			UseCase: glide.UseCaseGetPhoneNumber,
 			PLMN:    &testPLMN.TMobileUS,
+			ClientInfo: &glide.ClientInfo{
+				UserAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+			},
 		}
 
 		_, err := client.MagicAuth.Prepare(ctx, &prepReq)
@@ -209,6 +221,9 @@ func TestPerformance(t *testing.T) {
 				prepReq := glide.PrepareRequest{
 					UseCase: glide.UseCaseGetPhoneNumber,
 					PLMN:    &testPLMN.TMobileUS,
+					ClientInfo: &glide.ClientInfo{
+						UserAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+					},
 				}
 				_, err := client.MagicAuth.Prepare(ctx, &prepReq)
 				results <- err

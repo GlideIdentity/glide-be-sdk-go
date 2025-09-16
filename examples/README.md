@@ -64,4 +64,4 @@ In these examples, we simulate the client authentication step. In production:
 2. Send the response to your frontend
 3. Frontend uses Web SDK to perform authentication
 4. Frontend sends credential back to your backend
-5. Your backend calls `ProcessCredential()`
+5. Your backend calls `VerifyPhoneNumber()` or `GetPhoneNumber()`

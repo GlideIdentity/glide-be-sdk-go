@@ -50,6 +50,11 @@ func (s *magicAuthService) Prepare(ctx context.Context, req *PrepareRequest) (*P
 		apiReq["consent_data"] = req.ConsentData
 	}
 
+	// Add client info if provided
+	if req.ClientInfo != nil {
+		apiReq["client_info"] = req.ClientInfo
+	}
+
 	// Debug logging
 	if s.client.logger != nil {
 		reqBytes, _ := json.Marshal(apiReq)
@@ -208,30 +213,6 @@ func (s *magicAuthService) GetPhoneNumber(ctx context.Context, req *GetPhoneNumb
 	}
 
 	return &resp, nil
-}
-
-// ProcessCredential is deprecated. Use VerifyPhoneNumber or GetPhoneNumber instead.
-// Deprecated: This method will be removed in v2.0.0
-func (s *magicAuthService) ProcessCredential(ctx context.Context, req *ProcessRequest) (*ProcessResponse, error) {
-	// For backward compatibility, default to GetPhoneNumber behavior
-	// Parse session string as just the session key
-	getReq := &GetPhoneNumberRequest{
-		SessionInfo: &SessionInfo{
-			SessionKey: req.Session,
-		},
-		Credential: req.Response,
-	}
-
-	getResp, err := s.GetPhoneNumber(ctx, getReq)
-	if err != nil {
-		return nil, err
-	}
-
-	// Map to old response type
-	return &ProcessResponse{
-		PhoneNumber: getResp.PhoneNumber,
-		Verified:    false, // GetPhoneNumber doesn't have verified field
-	}, nil
 }
 
 // generateNonce generates a random base64url-encoded nonce

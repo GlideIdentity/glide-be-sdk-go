@@ -53,8 +53,9 @@ type PhoneAuthPrepareResponse struct {
 }
 
 type PhoneAuthProcessRequest struct {
-	Response interface{} `json:"response"`
-	Session  string      `json:"session"`
+	Response    interface{}            `json:"response"`
+	Session     string                 `json:"session,omitempty"`     // Deprecated: session key only
+	SessionInfo map[string]interface{} `json:"sessionInfo,omitempty"` // New: full session info
 	// Note: PhoneNumber not needed - server knows it from the session
 }
 
@@ -107,7 +108,6 @@ func main() {
 	// API routes
 	apiRouter := router.PathPrefix("/api").Subrouter()
 	apiRouter.HandleFunc("/phone-auth/prepare", prepareHandler).Methods("POST", "OPTIONS")
-	apiRouter.HandleFunc("/phone-auth/process", processHandler).Methods("POST", "OPTIONS") // Deprecated
 	apiRouter.HandleFunc("/phone-auth/verify", verifyHandler).Methods("POST", "OPTIONS")
 	apiRouter.HandleFunc("/phone-auth/get", getPhoneHandler).Methods("POST", "OPTIONS")
 
@@ -230,9 +230,28 @@ func verifyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create Glide verify request
+	// Handle both session formats
+	var sessionInfo *glide.SessionInfo
+	if req.SessionInfo != nil {
+		// New format with full session info
+		sessionKey, _ := req.SessionInfo["session_key"].(string)
+		nonce, _ := req.SessionInfo["nonce"].(string)
+		encKey, _ := req.SessionInfo["enc_key"].(string)
+		sessionInfo = &glide.SessionInfo{
+			SessionKey: sessionKey,
+			Nonce:      nonce,
+			EncKey:     encKey,
+		}
+	} else if req.Session != "" {
+		// Old format with just session key
+		sessionInfo = &glide.SessionInfo{
+			SessionKey: req.Session,
+		}
+	}
+
 	verifyReq := &glide.VerifyPhoneNumberRequest{
-		SessionKey: req.Session,
-		Credential: responseMap,
+		SessionInfo: sessionInfo,
+		Credential:  responseMap,
 	}
 
 	// Call Glide API
@@ -285,9 +304,28 @@ func getPhoneHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create Glide get phone request
+	// Handle both session formats
+	var sessionInfo *glide.SessionInfo
+	if req.SessionInfo != nil {
+		// New format with full session info
+		sessionKey, _ := req.SessionInfo["session_key"].(string)
+		nonce, _ := req.SessionInfo["nonce"].(string)
+		encKey, _ := req.SessionInfo["enc_key"].(string)
+		sessionInfo = &glide.SessionInfo{
+			SessionKey: sessionKey,
+			Nonce:      nonce,
+			EncKey:     encKey,
+		}
+	} else if req.Session != "" {
+		// Old format with just session key
+		sessionInfo = &glide.SessionInfo{
+			SessionKey: req.Session,
+		}
+	}
+
 	getReq := &glide.GetPhoneNumberRequest{
-		SessionKey: req.Session,
-		Credential: responseMap,
+		SessionInfo: sessionInfo,
+		Credential:  responseMap,
 	}
 
 	// Call Glide API
@@ -307,67 +345,6 @@ func getPhoneHandler(w http.ResponseWriter, r *http.Request) {
 
 	if cfg.Debug {
 		log.Printf("Get phone response: %+v", response)
-	}
-
-	sendJSONResponse(w, http.StatusOK, response)
-}
-
-// Process credential endpoint (deprecated, for backward compatibility)
-func processHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "OPTIONS" {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	var req PhoneAuthProcessRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		sendErrorResponse(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body", nil)
-		return
-	}
-
-	// Log the request if debug is enabled
-	if cfg.Debug {
-		log.Printf("Process request: session=%s, has_response=%v",
-			req.Session, req.Response != nil)
-	}
-
-	// Convert response to map if needed
-	responseMap, ok := req.Response.(map[string]interface{})
-	if !ok {
-		// Try to convert
-		responseBytes, _ := json.Marshal(req.Response)
-		json.Unmarshal(responseBytes, &responseMap)
-	}
-
-	// Determine which method to call based on request path or a flag
-	// For now, we'll use a simple heuristic: if the prepare was for VerifyPhoneNumber,
-	// we should have stored that info. Since we don't track it, we'll default to GetPhoneNumber
-	// TODO: In a real implementation, track the use case from prepare
-
-	// Try GetPhoneNumber by default (you could also check if phoneNumber was in original prepare)
-	getReq := &glide.GetPhoneNumberRequest{
-		SessionKey: req.Session,
-		Credential: responseMap,
-	}
-
-	// Call Glide API
-	ctx := context.Background()
-	getResp, err := glideClient.MagicAuth.GetPhoneNumber(ctx, getReq)
-	if err != nil {
-		// If it fails, might be a verify request, but for now just error
-		handleGlideError(w, err)
-		return
-	}
-
-	// Return response
-	response := PhoneAuthProcessResponse{
-		Success:     true,
-		PhoneNumber: getResp.PhoneNumber,
-		Verified:    false, // GetPhoneNumber doesn't verify
-	}
-
-	if cfg.Debug {
-		log.Printf("Process response: %+v", response)
 	}
 
 	sendJSONResponse(w, http.StatusOK, response)

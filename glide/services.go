@@ -30,10 +30,6 @@ type MagicAuthService interface {
 
 	// GetPhoneNumber retrieves the user's phone number
 	GetPhoneNumber(ctx context.Context, req *GetPhoneNumberRequest) (*GetPhoneNumberResponse, error)
-
-	// ProcessCredential processes the authentication response
-	// Deprecated: Use VerifyPhoneNumber or GetPhoneNumber instead
-	ProcessCredential(ctx context.Context, req *ProcessRequest) (*ProcessResponse, error)
 }
 
 // SimSwapService handles SIM swap detection
