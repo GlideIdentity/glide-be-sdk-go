@@ -59,3 +59,34 @@ func WithNoRateLimit() Option {
 		c.RateLimitEnabled = false
 	}
 }
+
+// WithDebug enables debug logging with debug level
+func WithDebug(debug bool) Option {
+	return func(c *Config) {
+		c.Debug = debug
+		if debug {
+			c.LogLevel = LogLevelDebug
+		} else {
+			c.LogLevel = LogLevelSilent
+		}
+	}
+}
+
+// WithLogLevel sets the logging level
+func WithLogLevel(level LogLevel) Option {
+	return func(c *Config) {
+		c.LogLevel = level
+		if level > LogLevelSilent {
+			c.Debug = true
+		}
+	}
+}
+
+// WithLogger sets a custom logger implementation
+func WithLogger(logger Logger) Option {
+	return func(c *Config) {
+		c.Logger = logger
+		// If a custom logger is provided, assume debug is enabled
+		c.Debug = true
+	}
+}

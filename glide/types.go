@@ -33,30 +33,74 @@ type ConsentData struct {
 }
 
 // PrepareResponse contains the authentication preparation result
+// SessionInfo contains session information for authentication flow
+type SessionInfo struct {
+	SessionKey string `json:"session_key"`
+	Nonce      string `json:"nonce"`
+	EncKey     string `json:"enc_key"`
+}
+
 type PrepareResponse struct {
 	// AuthenticationStrategy indicates the authentication method (ts43 or link)
 	AuthenticationStrategy AuthenticationStrategy `json:"authentication_strategy"`
 
-	// Session identifier for this authentication flow
-	Session string `json:"session"`
+	// Session information for this authentication flow
+	Session SessionInfo `json:"session"`
 
 	// Data contains strategy-specific information
 	Data map[string]interface{} `json:"data"`
 
 	// TTL session time-to-live in seconds (optional)
 	TTL int `json:"ttl,omitempty"`
+
+	// UseCase that was prepared (needed to know which endpoint to call in process)
+	// This is a client-side field, not from the server
+	UseCase UseCase `json:"-"` // Omit from JSON marshaling
+}
+
+// VerifyPhoneNumberRequest requests phone number verification
+type VerifyPhoneNumberRequest struct {
+	// SessionInfo from the prepare response (includes session_key, nonce, enc_key)
+	SessionInfo *SessionInfo `json:"session"`
+
+	// Credential from the Digital Credentials API (vp_token)
+	Credential map[string]interface{} `json:"response"`
+}
+
+// VerifyPhoneNumberResponse contains the verification result
+type VerifyPhoneNumberResponse struct {
+	// PhoneNumber that was verified
+	PhoneNumber string `json:"phone_number"`
+
+	// Verified indicates if the phone number was successfully verified
+	Verified bool `json:"verified"`
+}
+
+// GetPhoneNumberRequest requests phone number retrieval
+type GetPhoneNumberRequest struct {
+	// SessionInfo from the prepare response (includes session_key, nonce, enc_key)
+	SessionInfo *SessionInfo `json:"session"`
+
+	// Credential from the Digital Credentials API (vp_token)
+	Credential map[string]interface{} `json:"response"`
+}
+
+// GetPhoneNumberResponse contains the retrieved phone number
+type GetPhoneNumberResponse struct {
+	// PhoneNumber retrieved from the carrier
+	PhoneNumber string `json:"phone_number"`
 }
 
 // ProcessRequest processes the authentication credential
+// Deprecated: Use VerifyPhoneNumberRequest or GetPhoneNumberRequest instead
 type ProcessRequest struct {
-	// Session from the prepare response
+	// Session key from the prepare response (just the key, not the full SessionInfo)
 	Session string `json:"session"`
 
 	// Response from the client-side authentication
 	Response map[string]interface{} `json:"response"`
 
-	// PhoneNumber for VerifyPhoneNumber use case
-	PhoneNumber string `json:"phone_number,omitempty"`
+	// Note: PhoneNumber is NOT needed here - the server already knows it from the session
 }
 
 // ProcessResponse contains the authentication result

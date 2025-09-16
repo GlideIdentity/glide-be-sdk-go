@@ -47,7 +47,7 @@ func main() {
     
     // Process credential (after client-side authentication)
     processResp, err := client.MagicAuth.ProcessCredential(ctx, &glide.ProcessRequest{
-        Session:  prepareResp.Session,
+        Session:  prepareResp.Session.SessionKey,
         Response: credentialResponse,
     })
     if err != nil {

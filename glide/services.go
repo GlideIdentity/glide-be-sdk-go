@@ -25,7 +25,14 @@ type MagicAuthService interface {
 	// Prepare initiates the authentication flow
 	Prepare(ctx context.Context, req *PrepareRequest) (*PrepareResponse, error)
 
+	// VerifyPhoneNumber verifies a specific phone number
+	VerifyPhoneNumber(ctx context.Context, req *VerifyPhoneNumberRequest) (*VerifyPhoneNumberResponse, error)
+
+	// GetPhoneNumber retrieves the user's phone number
+	GetPhoneNumber(ctx context.Context, req *GetPhoneNumberRequest) (*GetPhoneNumberResponse, error)
+
 	// ProcessCredential processes the authentication response
+	// Deprecated: Use VerifyPhoneNumber or GetPhoneNumber instead
 	ProcessCredential(ctx context.Context, req *ProcessRequest) (*ProcessResponse, error)
 }
 

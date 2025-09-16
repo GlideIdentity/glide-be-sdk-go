@@ -1,0 +1,24 @@
+# Test and development files - NOT for distribution
+test-server/
+test-integration.sh
+examples/local-server/
+
+# Development files
+*.test
+*.out
+.env
+.env.*
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation for internal use
+**/test-*.md
+**/TEST*.md

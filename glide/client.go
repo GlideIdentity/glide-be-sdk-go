@@ -3,6 +3,7 @@ package glide
 import (
 	"context"
 	"net/http"
+	"os"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -20,6 +21,7 @@ type Client struct {
 	config      *Config
 	httpClient  *http.Client
 	rateLimiter *rate.Limiter
+	logger      Logger
 }
 
 // Config holds the client configuration
@@ -37,6 +39,11 @@ type Config struct {
 
 	// HTTP client (optional)
 	HTTPClient *http.Client
+
+	// Debug logging
+	Debug    bool     // Enable debug logging
+	LogLevel LogLevel // Log level (default: LogLevelSilent)
+	Logger   Logger   // Custom logger implementation (optional)
 }
 
 // New creates a new Glide client with the given options
@@ -46,6 +53,23 @@ func New(opts ...Option) *Client {
 		Timeout:    30 * time.Second,
 		RetryCount: 3,
 		RetryDelay: time.Second,
+		LogLevel:   LogLevelSilent, // Default to no logging
+	}
+
+	// Check environment variables for debug mode
+	if envDebug := os.Getenv("GLIDE_DEBUG"); envDebug != "" {
+		if envDebug == "true" || envDebug == "1" {
+			cfg.Debug = true
+			cfg.LogLevel = LogLevelDebug
+		}
+	}
+
+	// Check for log level environment variable
+	if envLogLevel := os.Getenv("GLIDE_LOG_LEVEL"); envLogLevel != "" {
+		cfg.LogLevel = ParseLogLevel(envLogLevel)
+		if cfg.LogLevel > LogLevelSilent {
+			cfg.Debug = true
+		}
 	}
 
 	// Apply options
@@ -65,10 +89,33 @@ func New(opts ...Option) *Client {
 		httpClient: cfg.HTTPClient,
 	}
 
+	// Set up logger
+	if cfg.Logger != nil {
+		// Use custom logger if provided
+		client.logger = cfg.Logger
+	} else if cfg.Debug || cfg.LogLevel > LogLevelSilent {
+		// Use default logger with specified level
+		client.logger = NewDefaultLogger(cfg.LogLevel)
+	} else {
+		// Use noop logger when logging is disabled
+		client.logger = NewNoopLogger()
+	}
+
+	// Log initialization
+	client.logger.Info("Glide SDK initialized",
+		Field{"version", "1.0.0"},
+		Field{"baseURL", cfg.BaseURL},
+		Field{"logLevel", cfg.LogLevel.String()},
+	)
+
 	// Initialize rate limiter if configured
 	if cfg.RateLimitEnabled {
 		limit := rate.Every(cfg.RateLimitPeriod / time.Duration(cfg.RateLimitRate))
 		client.rateLimiter = rate.NewLimiter(limit, cfg.RateLimitRate)
+		client.logger.Debug("Rate limiting enabled",
+			Field{"rate", cfg.RateLimitRate},
+			Field{"period", cfg.RateLimitPeriod.String()},
+		)
 	}
 
 	// Initialize services

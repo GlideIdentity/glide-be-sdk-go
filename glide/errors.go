@@ -153,26 +153,15 @@ func (e *Error) IsRetryable() bool {
 
 // sanitizeError removes sensitive information from server errors
 func sanitizeError(serverErr *Error) *Error {
-	// Create a clean error without sensitive details
-	sanitized := &Error{
+	// Pass through the backend error as-is, trusting the backend to provide appropriate messages
+	// The backend is responsible for not exposing sensitive information
+	return &Error{
 		Code:      serverErr.Code,
-		Message:   getPublicMessage(serverErr.Code),
+		Message:   serverErr.Message, // Use the actual backend message
 		Status:    serverErr.Status,
 		RequestID: serverErr.RequestID,
+		Details:   serverErr.Details, // Include all details from backend
 	}
-
-	// Only include safe details
-	if serverErr.Details != nil {
-		sanitized.Details = make(map[string]interface{})
-		// Add only non-sensitive details
-		for k, v := range serverErr.Details {
-			if isSafeDetail(k) {
-				sanitized.Details[k] = v
-			}
-		}
-	}
-
-	return sanitized
 }
 
 // getPublicMessage returns a user-safe message for the error code

@@ -80,20 +80,19 @@ func verifyPhoneNumber(client *glide.Client) error {
 		"vp_token": "simulated-token",
 	}
 
-	// Step 3: Process the credential
-	processReq := &glide.ProcessRequest{
-		Session:     prepareResp.Session,
-		Response:    credentialResponse,
-		PhoneNumber: "+14155552671",
+	// Step 3: Verify the phone number
+	verifyReq := &glide.VerifyPhoneNumberRequest{
+		SessionInfo: &prepareResp.Session,
+		Credential:  credentialResponse,
 	}
 
-	processResp, err := client.MagicAuth.ProcessCredential(ctx, processReq)
+	verifyResp, err := client.MagicAuth.VerifyPhoneNumber(ctx, verifyReq)
 	if err != nil {
-		return fmt.Errorf("process failed: %v", err)
+		return fmt.Errorf("verification failed: %v", err)
 	}
 
 	fmt.Printf("Phone number verified: %s (verified: %v)\n",
-		processResp.PhoneNumber, processResp.Verified)
+		verifyResp.PhoneNumber, verifyResp.Verified)
 
 	return nil
 }
@@ -122,17 +121,17 @@ func getPhoneNumber(client *glide.Client) error {
 		"vp_token": "simulated-token",
 	}
 
-	processReq := &glide.ProcessRequest{
-		Session:  prepareResp.Session,
-		Response: credentialResponse,
+	getReq := &glide.GetPhoneNumberRequest{
+		SessionInfo: &prepareResp.Session,
+		Credential:  credentialResponse,
 	}
 
-	processResp, err := client.MagicAuth.ProcessCredential(ctx, processReq)
+	getResp, err := client.MagicAuth.GetPhoneNumber(ctx, getReq)
 	if err != nil {
-		return fmt.Errorf("process failed: %v", err)
+		return fmt.Errorf("get phone number failed: %v", err)
 	}
 
-	fmt.Printf("Retrieved phone number: %s\n", processResp.PhoneNumber)
+	fmt.Printf("Retrieved phone number: %s\n", getResp.PhoneNumber)
 
 	return nil
 }

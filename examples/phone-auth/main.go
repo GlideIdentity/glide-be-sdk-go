@@ -91,21 +91,20 @@ func verifyPhoneNumber(ctx context.Context, client *glide.Client) error {
 		"vp_token": "simulated-token-from-carrier",
 	}
 
-	// Step 3: Process the credential
-	processReq := &glide.ProcessRequest{
-		Session:     prepareResp.Session,
-		Response:    credentialResponse,
-		PhoneNumber: "+14155552671", // Required for VerifyPhoneNumber
+	// Step 3: Verify the phone number
+	verifyReq := &glide.VerifyPhoneNumberRequest{
+		SessionInfo: &prepareResp.Session,
+		Credential:  credentialResponse,
 	}
 
-	processResp, err := client.MagicAuth.ProcessCredential(ctx, processReq)
+	verifyResp, err := client.MagicAuth.VerifyPhoneNumber(ctx, verifyReq)
 	if err != nil {
-		return fmt.Errorf("process failed: %v", err)
+		return fmt.Errorf("verification failed: %v", err)
 	}
 
 	fmt.Printf("\n✅ Phone number verified!\n")
-	fmt.Printf("   Number: %s\n", processResp.PhoneNumber)
-	fmt.Printf("   Verified: %v\n", processResp.Verified)
+	fmt.Printf("   Number: %s\n", verifyResp.PhoneNumber)
+	fmt.Printf("   Verified: %v\n", verifyResp.Verified)
 
 	return nil
 }
@@ -142,19 +141,18 @@ func getPhoneNumber(ctx context.Context, client *glide.Client) error {
 		"vp_token": "simulated-token-with-phone-claim",
 	}
 
-	processReq := &glide.ProcessRequest{
-		Session:  prepareResp.Session,
-		Response: credentialResponse,
-		// Note: No phone number needed for GetPhoneNumber use case
+	getReq := &glide.GetPhoneNumberRequest{
+		SessionInfo: &prepareResp.Session,
+		Credential:  credentialResponse,
 	}
 
-	processResp, err := client.MagicAuth.ProcessCredential(ctx, processReq)
+	getResp, err := client.MagicAuth.GetPhoneNumber(ctx, getReq)
 	if err != nil {
-		return fmt.Errorf("process failed: %v", err)
+		return fmt.Errorf("get phone number failed: %v", err)
 	}
 
 	fmt.Printf("\n✅ Phone number retrieved!\n")
-	fmt.Printf("   Number: %s\n", processResp.PhoneNumber)
+	fmt.Printf("   Number: %s\n", getResp.PhoneNumber)
 
 	return nil
 }

@@ -7,21 +7,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	url2 "net/url"
+	"strings"
 	"time"
 
 	"golang.org/x/time/rate"
 )
 
-// rateLimiter handles optional rate limiting
-type rateLimiter struct {
-	limiter *rate.Limiter
-	enabled bool
-}
-
 // httpTransport wraps the HTTP client with retry and rate limiting
 type httpTransport struct {
 	client      *http.Client
-	rateLimiter *rateLimiter
+	rateLimiter *rate.Limiter
 	config      *Config
 }
 
@@ -29,7 +25,14 @@ type httpTransport struct {
 func (c *Client) doRequest(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
 	// Apply rate limiting if enabled
 	if c.config.RateLimitEnabled && c.rateLimiter != nil {
+		c.logger.Debug("Applying rate limiting",
+			Field{"method", method},
+			Field{"path", path},
+		)
 		if err := c.rateLimiter.Wait(ctx); err != nil {
+			c.logger.Error("Rate limit exceeded",
+				Field{"error", err.Error()},
+			)
 			return nil, NewError(ErrCodeRateLimitExceeded, "Client-side rate limit exceeded")
 		}
 	}
@@ -38,9 +41,16 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body interf
 	for attempt := 0; attempt <= c.config.RetryCount; attempt++ {
 		// Add retry delay (except for first attempt)
 		if attempt > 0 {
+			c.logger.Debug("Retrying request",
+				Field{"attempt", attempt},
+				Field{"delay", c.config.RetryDelay * time.Duration(attempt)},
+			)
 			select {
 			case <-time.After(c.config.RetryDelay * time.Duration(attempt)):
 			case <-ctx.Done():
+				c.logger.Error("Request cancelled during retry",
+					Field{"attempt", attempt},
+				)
 				return nil, NewError(ErrCodeInternalServerError, "Request cancelled")
 			}
 		}
@@ -54,34 +64,70 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body interf
 		// Check if error is retryable
 		if glideErr, ok := err.(*Error); ok {
 			if !glideErr.IsRetryable() {
+				c.logger.Error("Non-retryable error",
+					Field{"error", glideErr.Error()},
+					Field{"code", glideErr.Code},
+				)
 				return nil, err
 			}
+			c.logger.Warn("Retryable error occurred",
+				Field{"error", glideErr.Error()},
+				Field{"code", glideErr.Code},
+				Field{"attempt", attempt},
+			)
 		}
 
 		lastErr = err
 	}
 
+	c.logger.Error("All retry attempts exhausted",
+		Field{"lastError", lastErr.Error()},
+		Field{"retryCount", c.config.RetryCount},
+	)
 	return nil, lastErr
 }
 
 // performRequest executes a single HTTP request
 func (c *Client) performRequest(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
-	// Build URL
+	// Build URL with API key as query parameter
 	url := c.config.BaseURL + path
+	if c.config.APIKey != "" {
+		// Add API key as query parameter (like Node SDK)
+		if strings.Contains(url, "?") {
+			url += "&apikey=" + url2.QueryEscape(c.config.APIKey)
+		} else {
+			url += "?apikey=" + url2.QueryEscape(c.config.APIKey)
+		}
+	}
+
+	// Log the request
+	c.logger.Debug("Preparing HTTP request",
+		Field{"method", method},
+		Field{"url", url},
+	)
 
 	// Marshal body if provided
 	var bodyReader io.Reader
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
 		if err != nil {
+			c.logger.Error("Failed to marshal request body",
+				Field{"error", err.Error()},
+			)
 			return nil, NewError(ErrCodeInvalidParameters, "Failed to marshal request body")
 		}
 		bodyReader = bytes.NewReader(jsonBody)
+		c.logger.Debug("Request body prepared",
+			Field{"size", len(jsonBody)},
+		)
 	}
 
 	// Create request
 	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
+		c.logger.Error("Failed to create request",
+			Field{"error", err.Error()},
+		)
 		return nil, NewError(ErrCodeInternalServerError, "Failed to create request")
 	}
 
@@ -90,28 +136,66 @@ func (c *Client) performRequest(ctx context.Context, method, path string, body i
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "glide-go-sdk/1.0.0")
 
-	// Add authentication
+	// API key is added as query parameter above, not as header
 	if c.config.APIKey != "" {
-		req.Header.Set("X-API-Key", c.config.APIKey)
+		c.logger.Debug("API key authentication added",
+			Field{"apiKey", c.config.APIKey}, // Will be automatically redacted
+		)
 	}
+
+	// Log request details
+	start := time.Now()
+	c.logger.Info("Sending HTTP request",
+		Field{"method", method},
+		Field{"path", path},
+	)
 
 	// Execute request
 	resp, err := c.httpClient.Do(req)
+	elapsed := time.Since(start)
+
 	if err != nil {
+		c.logger.Error("HTTP request failed",
+			Field{"error", err.Error()},
+			Field{"elapsed", elapsed.String()},
+		)
 		return nil, NewError(ErrCodeServiceUnavailable, "Failed to execute request")
 	}
 	defer resp.Body.Close()
 
+	// Log response status
+	c.logger.Debug("HTTP response received",
+		Field{"statusCode", resp.StatusCode},
+		Field{"elapsed", elapsed.String()},
+	)
+
 	// Read response body
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
+		c.logger.Error("Failed to read response body",
+			Field{"error", err.Error()},
+		)
 		return nil, NewError(ErrCodeInternalServerError, "Failed to read response body")
 	}
 
+	c.logger.Debug("Response body received",
+		Field{"size", len(respBody)},
+	)
+
 	// Check for errors
 	if resp.StatusCode >= 400 {
+		c.logger.Error("API error response",
+			Field{"statusCode", resp.StatusCode},
+			Field{"responseSize", len(respBody)},
+		)
+		c.logger.Debug("Error response body", Field{"body", string(respBody)})
 		return nil, c.parseErrorResponse(resp.StatusCode, respBody)
 	}
+
+	c.logger.Info("Request completed successfully",
+		Field{"statusCode", resp.StatusCode},
+		Field{"elapsed", elapsed.String()},
+	)
 
 	return respBody, nil
 }
