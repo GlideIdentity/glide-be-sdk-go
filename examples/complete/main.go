@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/glideidentity/glide-go-sdk/glide"
+	"github.com/GlideIdentity/glide-be-sdk-go/glide"
 )
 
 func main() {

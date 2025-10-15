@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/glideidentity/glide-go-sdk/glide"
+	"github.com/GlideIdentity/glide-be-sdk-go/glide"
 )
 
 func TestDebugPrepareRequest(t *testing.T) {

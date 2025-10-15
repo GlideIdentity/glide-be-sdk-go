@@ -1,9 +1,9 @@
-module github.com/glideidentity/glide-go-sdk/test-server
+module github.com/GlideIdentity/glide-be-sdk-go/test-server
 
 go 1.21
 
 require (
-	github.com/glideidentity/glide-go-sdk v0.1.0
+	github.com/GlideIdentity/glide-be-sdk-go v0.1.0
 	github.com/gorilla/handlers v1.5.2
 	github.com/gorilla/mux v1.8.1
 )
@@ -13,4 +13,4 @@ require (
 	golang.org/x/time v0.5.0 // indirect
 )
 
-replace github.com/glideidentity/glide-go-sdk => ../
+replace github.com/GlideIdentity/glide-be-sdk-go => ../

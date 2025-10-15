@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/glideidentity/glide-go-sdk/glide"
+	"github.com/GlideIdentity/glide-be-sdk-go/glide"
 )
 
 // CustomLogger demonstrates how to implement a custom logger

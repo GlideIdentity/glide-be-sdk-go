@@ -13,7 +13,7 @@ Official Go SDK for Glide Identity's authentication and verification services.
 ## Installation
 
 ```bash
-go get github.com/glideidentity/glide-go-sdk
+go get github.com/GlideIdentity/glide-be-sdk-go
 ```
 
 ## Quick Start
@@ -25,7 +25,7 @@ import (
     "context"
     "log"
     
-    "github.com/glideidentity/glide-go-sdk"
+    "github.com/GlideIdentity/glide-be-sdk-go"
 )
 
 func main() {

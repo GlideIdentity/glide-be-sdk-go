@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/glideidentity/glide-go-sdk/glide"
+	"github.com/GlideIdentity/glide-be-sdk-go/glide"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 )
@@ -238,7 +238,7 @@ func verifyHandler(w http.ResponseWriter, r *http.Request) {
 		encKey, _ := req.SessionInfo["enc_key"].(string)
 		sessionInfo = &glide.SessionInfo{
 			SessionKey: sessionKey,
-			Metadata:   &glide.SessionMetadata{
+			Metadata: &glide.SessionMetadata{
 				Nonce:  nonce,
 				EncKey: encKey,
 			},

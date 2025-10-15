@@ -5,7 +5,7 @@
 //
 // Basic usage:
 //
-//	import "github.com/glideidentity/glide-go-sdk"
+//	import "github.com/GlideIdentity/glide-be-sdk-go"
 //
 //	// Create client
 //	client := glide.New(
@@ -20,11 +20,11 @@
 package glide
 
 // Re-export everything from the glide package for root-level access
-// This allows users to import "github.com/glideidentity/glide-go-sdk"
-// instead of "github.com/glideidentity/glide-go-sdk/glide"
+// This allows users to import "github.com/GlideIdentity/glide-be-sdk-go"
+// instead of "github.com/GlideIdentity/glide-be-sdk-go/glide"
 
 import (
-	"github.com/glideidentity/glide-go-sdk/glide"
+	"github.com/GlideIdentity/glide-be-sdk-go/glide"
 )
 
 // Client and configuration types

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/glideidentity/glide-go-sdk/glide"
+	"github.com/GlideIdentity/glide-be-sdk-go/glide"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

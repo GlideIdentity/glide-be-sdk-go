@@ -1,4 +1,4 @@
-module github.com/glideidentity/glide-go-sdk
+module github.com/GlideIdentity/glide-be-sdk-go
 
 go 1.21
 

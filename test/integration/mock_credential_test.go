@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/glideidentity/glide-go-sdk/glide"
+	"github.com/GlideIdentity/glide-be-sdk-go/glide"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,8 +70,8 @@ func TestMockCredentialProcessing(t *testing.T) {
 
 	t.Run("should handle missing aggregator ID in vp_token", func(t *testing.T) {
 		req := &glide.GetPhoneNumberRequest{
-			Session: &prepareResult.Session,
-			Credential:  mockCredentialResponses.MissingGlide,
+			Session:    &prepareResult.Session,
+			Credential: mockCredentialResponses.MissingGlide,
 		}
 
 		_, err := client.MagicAuth.GetPhoneNumber(ctx, req)
@@ -86,8 +86,8 @@ func TestMockCredentialProcessing(t *testing.T) {
 
 	t.Run("should handle empty vp_token", func(t *testing.T) {
 		req := &glide.GetPhoneNumberRequest{
-			Session: &prepareResult.Session,
-			Credential:  mockCredentialResponses.EmptyVPToken,
+			Session:    &prepareResult.Session,
+			Credential: mockCredentialResponses.EmptyVPToken,
 		}
 
 		_, err := client.MagicAuth.GetPhoneNumber(ctx, req)
@@ -102,8 +102,8 @@ func TestMockCredentialProcessing(t *testing.T) {
 
 	t.Run("should handle completely invalid credential format", func(t *testing.T) {
 		req := &glide.GetPhoneNumberRequest{
-			Session: &prepareResult.Session,
-			Credential:  mockCredentialResponses.InvalidFormat,
+			Session:    &prepareResult.Session,
+			Credential: mockCredentialResponses.InvalidFormat,
 		}
 
 		_, err := client.MagicAuth.GetPhoneNumber(ctx, req)
@@ -118,8 +118,8 @@ func TestMockCredentialProcessing(t *testing.T) {
 
 	t.Run("should handle invalid JWT token from server", func(t *testing.T) {
 		req := &glide.GetPhoneNumberRequest{
-			Session: &prepareResult.Session,
-			Credential:  mockCredentialResponses.InvalidToken,
+			Session:    &prepareResult.Session,
+			Credential: mockCredentialResponses.InvalidToken,
 		}
 
 		_, err := client.MagicAuth.GetPhoneNumber(ctx, req)
@@ -140,8 +140,8 @@ func TestMockCredentialProcessing(t *testing.T) {
 		}
 
 		req := &glide.GetPhoneNumberRequest{
-			Session: expiredSession,
-			Credential:  mockCredentialResponses.ValidTS43,
+			Session:    expiredSession,
+			Credential: mockCredentialResponses.ValidTS43,
 		}
 
 		_, err := client.MagicAuth.GetPhoneNumber(ctx, req)
@@ -170,8 +170,8 @@ func TestMockCredentialProcessing(t *testing.T) {
 
 		// Try to verify with a MOCK credential (not a real one from actual device)
 		req := &glide.VerifyPhoneNumberRequest{
-			Session: &verifyPrepare.Session,
-			Credential:  mockCredentialResponses.ValidTS43, // Mock/forged credential
+			Session:    &verifyPrepare.Session,
+			Credential: mockCredentialResponses.ValidTS43, // Mock/forged credential
 		}
 
 		_, err = client.MagicAuth.VerifyPhoneNumber(ctx, req)
@@ -196,8 +196,8 @@ func TestMockCredentialProcessing(t *testing.T) {
 		}
 
 		req := &glide.GetPhoneNumberRequest{
-			Session: expiredSession,
-			Credential:  mockCredentialResponses.ValidTS43,
+			Session:    expiredSession,
+			Credential: mockCredentialResponses.ValidTS43,
 		}
 
 		_, err := client.MagicAuth.GetPhoneNumber(ctx, req)
