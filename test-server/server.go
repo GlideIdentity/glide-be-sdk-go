@@ -54,9 +54,8 @@ type PhoneAuthPrepareResponse struct {
 
 type PhoneAuthProcessRequest struct {
 	Response    interface{}            `json:"response"`
-	Session     string                 `json:"session,omitempty"`     // Deprecated: session key only
+	Session     string                 `json:"session,omitempty"`
 	SessionInfo map[string]interface{} `json:"sessionInfo,omitempty"` // New: full session info
-	// Note: PhoneNumber not needed - server knows it from the session
 }
 
 type PhoneAuthProcessResponse struct {
@@ -239,19 +238,20 @@ func verifyHandler(w http.ResponseWriter, r *http.Request) {
 		encKey, _ := req.SessionInfo["enc_key"].(string)
 		sessionInfo = &glide.SessionInfo{
 			SessionKey: sessionKey,
-			Nonce:      nonce,
-			EncKey:     encKey,
+			Metadata:   &glide.SessionMetadata{
+				Nonce:  nonce,
+				EncKey: encKey,
+			},
 		}
 	} else if req.Session != "" {
-		// Old format with just session key
 		sessionInfo = &glide.SessionInfo{
 			SessionKey: req.Session,
 		}
 	}
 
 	verifyReq := &glide.VerifyPhoneNumberRequest{
-		SessionInfo: sessionInfo,
-		Credential:  responseMap,
+		Session:    sessionInfo,
+		Credential: responseMap,
 	}
 
 	// Call Glide API
@@ -313,19 +313,20 @@ func getPhoneHandler(w http.ResponseWriter, r *http.Request) {
 		encKey, _ := req.SessionInfo["enc_key"].(string)
 		sessionInfo = &glide.SessionInfo{
 			SessionKey: sessionKey,
-			Nonce:      nonce,
-			EncKey:     encKey,
+			Metadata: &glide.SessionMetadata{
+				Nonce:  nonce,
+				EncKey: encKey,
+			},
 		}
 	} else if req.Session != "" {
-		// Old format with just session key
 		sessionInfo = &glide.SessionInfo{
 			SessionKey: req.Session,
 		}
 	}
 
 	getReq := &glide.GetPhoneNumberRequest{
-		SessionInfo: sessionInfo,
-		Credential:  responseMap,
+		Session:    sessionInfo,
+		Credential: responseMap,
 	}
 
 	// Call Glide API

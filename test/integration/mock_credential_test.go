@@ -136,8 +136,7 @@ func TestMockCredentialProcessing(t *testing.T) {
 		// Create a session info with expired session key
 		expiredSession := &glide.SessionInfo{
 			SessionKey: mockCredentialResponses.ExpiredSession,
-			Nonce:      prepareResult.Session.Nonce,
-			EncKey:     prepareResult.Session.EncKey,
+			Metadata:   prepareResult.Session.Metadata,
 		}
 
 		req := &glide.GetPhoneNumberRequest{
@@ -190,8 +189,10 @@ func TestMockCredentialProcessing(t *testing.T) {
 		// Use expired session to trigger detailed error
 		expiredSession := &glide.SessionInfo{
 			SessionKey: "non-existent-session-key",
-			Nonce:      prepareResult.Session.Nonce,
-			EncKey:     prepareResult.Session.EncKey,
+			Metadata: &glide.SessionMetadata{
+				Nonce:  prepareResult.Session.Metadata.Nonce,
+				EncKey: prepareResult.Session.Metadata.EncKey,
+			},
 		}
 
 		req := &glide.GetPhoneNumberRequest{

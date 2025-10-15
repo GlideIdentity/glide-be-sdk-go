@@ -71,7 +71,7 @@ func verifyPhoneNumber(client *glide.Client) error {
 	}
 
 	fmt.Printf("Authentication prepared with strategy: %s\n", prepareResp.AuthenticationStrategy)
-	fmt.Printf("Session: %s\n", prepareResp.Session)
+	fmt.Printf("Session Key: %s\n", prepareResp.Session.SessionKey)
 
 	// Step 2: Client performs authentication (browser/app)
 	// This would happen in your frontend using the Web SDK

@@ -130,9 +130,9 @@ func (c *Client) performRequest(ctx context.Context, method, path string, body i
 	// Track timing
 	start := time.Now()
 
-	// Log request with formatter if available (only if pretty format is enabled)
+	// Log formatted request if pretty format is enabled
 	if dl, ok := c.logger.(*defaultLogger); ok && dl.formatter != nil && dl.format == LogFormatPretty {
-		// First show the full formatted request like Node SDK
+		// Show formatted request
 		operation := getOperationFromURL(url)
 		fmt.Printf("\n========== %s REQUEST ==========\n", operation)
 
@@ -149,11 +149,10 @@ func (c *Client) performRequest(ctx context.Context, method, path string, body i
 			reqObj["body"] = body
 		}
 
-		// Pretty print the JSON
 		if jsonBytes, err := json.MarshalIndent(reqObj, "", "  "); err == nil {
 			fmt.Println(string(jsonBytes))
 		}
-		fmt.Println("================================================\n")
+		fmt.Println("================================================")
 
 		// Then show the box summary
 		details := make(map[string]interface{})
@@ -197,12 +196,12 @@ func (c *Client) performRequest(ctx context.Context, method, path string, body i
 		return nil, NewError(ErrCodeInternalServerError, "Failed to read response body")
 	}
 
-	// Log response with formatter if available (only if pretty format is enabled)
+	// Log formatted response if pretty format is enabled
 	if dl, ok := c.logger.(*defaultLogger); ok && dl.formatter != nil && dl.format == LogFormatPretty {
 		// Extract operation name from URL for response logging
 		operation := getOperationFromURL(url)
 
-		// First show the full formatted response like Node SDK
+		// Show formatted response
 		fmt.Printf("\n========== %s RESPONSE ==========\n", operation)
 
 		// Build response object for pretty printing
@@ -218,11 +217,10 @@ func (c *Client) performRequest(ctx context.Context, method, path string, body i
 			}
 		}
 
-		// Pretty print the JSON
 		if jsonBytes, err := json.MarshalIndent(respObj, "", "  "); err == nil {
 			fmt.Println(string(jsonBytes))
 		}
-		fmt.Println("=================================================\n")
+		fmt.Println("=================================================")
 
 		// Then show the box summary
 		details := make(map[string]interface{})
@@ -256,21 +254,18 @@ func (c *Client) performRequest(ctx context.Context, method, path string, body i
 
 	// Check for errors
 	if resp.StatusCode >= 400 {
-		// Only log error details if not using pretty format
 		if dl, ok := c.logger.(*defaultLogger); !ok || dl.format != LogFormatPretty {
 			c.logger.Error("API error response",
 				Field{"statusCode", resp.StatusCode},
 				Field{"responseSize", len(respBody)},
 			)
 		}
-		// Only log error body if not using pretty format
 		if dl, ok := c.logger.(*defaultLogger); !ok || dl.format != LogFormatPretty {
 			c.logger.Debug("Error response body", Field{"body", string(respBody)})
 		}
 		return nil, c.parseErrorResponse(resp.StatusCode, respBody)
 	}
 
-	// Only log success if not using pretty format
 	if dl, ok := c.logger.(*defaultLogger); !ok || dl.format != LogFormatPretty {
 		c.logger.Info("Request completed successfully",
 			Field{"statusCode", resp.StatusCode},

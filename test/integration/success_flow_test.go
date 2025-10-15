@@ -150,9 +150,6 @@ func TestGetPhoneNumberFlow(t *testing.T) {
 		assert.Equal(t, glide.ErrCodeMissingParameters, glideErr.Code)
 		assert.Contains(t, glideErr.Message, "PLMN")
 	})
-
-	// Removed "should reject phone number for GetPhoneNumber" test
-	// to match Node.js SDK test suite - Node.js doesn't have this test
 }
 
 func TestVerifyPhoneNumberFlow(t *testing.T) {

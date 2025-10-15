@@ -49,15 +49,10 @@ type SessionMetadata struct {
 }
 
 // SessionInfo contains session information for authentication flow
-// Matches the actual API response structure with nested metadata
 type SessionInfo struct {
 	SessionKey   string           `json:"session_key"`
 	Metadata     *SessionMetadata `json:"metadata,omitempty"`
 	ProtocolType string           `json:"protocol_type,omitempty"`
-
-	// Legacy flat fields for backward compatibility (deprecated)
-	Nonce  string `json:"nonce,omitempty"`
-	EncKey string `json:"enc_key,omitempty"`
 }
 
 type PrepareResponse struct {

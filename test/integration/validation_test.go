@@ -60,7 +60,7 @@ func TestPhoneNumberValidation(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			prepReq := glide.PrepareRequest{
-				UseCase:     glide.UseCaseVerifyPhoneNumber, // Changed to VerifyPhoneNumber since we're testing phone numbers
+				UseCase:     glide.UseCaseVerifyPhoneNumber,
 				PhoneNumber: tc.phoneNumber,
 			}
 

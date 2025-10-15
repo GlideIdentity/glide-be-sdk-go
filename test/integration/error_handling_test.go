@@ -77,7 +77,7 @@ func TestValidationErrors(t *testing.T) {
 
 	t.Run("should return 400 for invalid phone number format", func(t *testing.T) {
 		prepReq := glide.PrepareRequest{
-			UseCase:     glide.UseCaseVerifyPhoneNumber, // Changed to verify since we're testing phone validation
+			UseCase:     glide.UseCaseVerifyPhoneNumber,
 			PhoneNumber: testPhoneNumbers.InvalidFormat,
 		}
 

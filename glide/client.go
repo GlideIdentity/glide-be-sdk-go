@@ -108,7 +108,7 @@ func New(opts ...Option) *Client {
 		client.logger = NewNoopLogger()
 	}
 
-	// Log initialization (skip if using pretty format to avoid clutter)
+	// Log initialization
 	if dl, ok := client.logger.(*defaultLogger); !ok || dl.format != LogFormatPretty {
 		client.logger.Info("Glide SDK initialized",
 			Field{"version", "1.0.0"},
