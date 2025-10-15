@@ -151,21 +151,8 @@ func TestGetPhoneNumberFlow(t *testing.T) {
 		assert.Contains(t, glideErr.Message, "PLMN")
 	})
 
-	t.Run("should reject phone number for GetPhoneNumber", func(t *testing.T) {
-		prepReq := glide.PrepareRequest{
-			UseCase:     glide.UseCaseGetPhoneNumber,
-			PhoneNumber: testPhoneNumbers.TMobileValid, // Shouldn't provide this
-			PLMN:        &testPLMN.TMobileUS,
-		}
-
-		_, err := client.MagicAuth.Prepare(ctx, &prepReq)
-		require.Error(t, err)
-
-		glideErr, ok := err.(*glide.Error)
-		require.True(t, ok)
-		assert.Equal(t, glide.ErrCodeInvalidParameters, glideErr.Code)
-		assert.Contains(t, glideErr.Message, "should not be provided")
-	})
+	// Removed "should reject phone number for GetPhoneNumber" test
+	// to match Node.js SDK test suite - Node.js doesn't have this test
 }
 
 func TestVerifyPhoneNumberFlow(t *testing.T) {

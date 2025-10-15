@@ -44,14 +44,23 @@ type defaultLogger struct {
 	level      LogLevel
 	logger     *log.Logger
 	timeFormat string
+	formatter  *LogFormatter
+	format     LogFormat
 }
 
 // NewDefaultLogger creates a new default logger with the specified level
 func NewDefaultLogger(level LogLevel) Logger {
+	return NewDefaultLoggerWithFormat(level, LogFormatPretty)
+}
+
+// NewDefaultLoggerWithFormat creates a new default logger with specified level and format
+func NewDefaultLoggerWithFormat(level LogLevel, format LogFormat) Logger {
 	return &defaultLogger{
 		level:      level,
 		logger:     log.New(os.Stdout, "[Glide] ", 0),
 		timeFormat: time.RFC3339,
+		formatter:  NewLogFormatter(format, "[Glide]"),
+		format:     format,
 	}
 }
 
@@ -190,6 +199,20 @@ func (l LogLevel) String() string {
 		return "silent"
 	default:
 		return "unknown"
+	}
+}
+
+// ParseLogFormat parses a string into a LogFormat
+func ParseLogFormat(format string) LogFormat {
+	switch strings.ToLower(format) {
+	case "json":
+		return LogFormatJSON
+	case "simple":
+		return LogFormatSimple
+	case "pretty":
+		return LogFormatPretty
+	default:
+		return LogFormatPretty
 	}
 }
 

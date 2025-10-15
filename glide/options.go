@@ -90,3 +90,10 @@ func WithLogger(logger Logger) Option {
 		c.Debug = true
 	}
 }
+
+// WithLogFormat sets the log output format (pretty, json, simple)
+func WithLogFormat(format LogFormat) Option {
+	return func(c *Config) {
+		c.LogFormat = format
+	}
+}

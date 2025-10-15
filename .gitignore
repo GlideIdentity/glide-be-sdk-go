@@ -29,5 +29,18 @@ vendor/
 # Example binaries
 examples/phone-auth/phone-auth
 examples/complete/complete
+examples/phone-auth/main
+examples/complete/main
+examples/local-server/main
 *.log
 test-server/test-server
+
+# Environment files
+.env
+.env.*
+*.env
+
+# Test outputs
+test_results.txt
+coverage.txt
+*.out

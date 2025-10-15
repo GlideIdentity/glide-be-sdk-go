@@ -82,8 +82,8 @@ func verifyPhoneNumber(client *glide.Client) error {
 
 	// Step 3: Verify the phone number
 	verifyReq := &glide.VerifyPhoneNumberRequest{
-		SessionInfo: &prepareResp.Session,
-		Credential:  credentialResponse,
+		Session:    &prepareResp.Session,
+		Credential: credentialResponse,
 	}
 
 	verifyResp, err := client.MagicAuth.VerifyPhoneNumber(ctx, verifyReq)
@@ -122,8 +122,8 @@ func getPhoneNumber(client *glide.Client) error {
 	}
 
 	getReq := &glide.GetPhoneNumberRequest{
-		SessionInfo: &prepareResp.Session,
-		Credential:  credentialResponse,
+		Session:    &prepareResp.Session,
+		Credential: credentialResponse,
 	}
 
 	getResp, err := client.MagicAuth.GetPhoneNumber(ctx, getReq)
@@ -234,7 +234,7 @@ func handleErrors() {
 			switch glideErr.Code {
 			case glide.ErrCodeCarrierNotEligible:
 				// Use alternative verification method
-			case glide.ErrCodeInvalidSessionState:
+			case glide.ErrCodeSessionNotFound:
 				// Restart the flow
 			case glide.ErrCodeRateLimitExceeded:
 				// Wait and retry

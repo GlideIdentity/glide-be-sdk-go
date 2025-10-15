@@ -41,9 +41,10 @@ type Config struct {
 	HTTPClient *http.Client
 
 	// Debug logging
-	Debug    bool     // Enable debug logging
-	LogLevel LogLevel // Log level (default: LogLevelSilent)
-	Logger   Logger   // Custom logger implementation (optional)
+	Debug     bool      // Enable debug logging
+	LogLevel  LogLevel  // Log level (default: LogLevelSilent)
+	LogFormat LogFormat // Log output format (default: LogFormatPretty)
+	Logger    Logger    // Custom logger implementation (optional)
 }
 
 // New creates a new Glide client with the given options
@@ -53,7 +54,8 @@ func New(opts ...Option) *Client {
 		Timeout:    30 * time.Second,
 		RetryCount: 3,
 		RetryDelay: time.Second,
-		LogLevel:   LogLevelSilent, // Default to no logging
+		LogLevel:   LogLevelSilent,  // Default to no logging
+		LogFormat:  LogFormatPretty, // Default to pretty format
 	}
 
 	// Check environment variables for debug mode
@@ -70,6 +72,11 @@ func New(opts ...Option) *Client {
 		if cfg.LogLevel > LogLevelSilent {
 			cfg.Debug = true
 		}
+	}
+
+	// Check for log format environment variable
+	if envLogFormat := os.Getenv("GLIDE_LOG_FORMAT"); envLogFormat != "" {
+		cfg.LogFormat = ParseLogFormat(envLogFormat)
 	}
 
 	// Apply options
@@ -94,19 +101,21 @@ func New(opts ...Option) *Client {
 		// Use custom logger if provided
 		client.logger = cfg.Logger
 	} else if cfg.Debug || cfg.LogLevel > LogLevelSilent {
-		// Use default logger with specified level
-		client.logger = NewDefaultLogger(cfg.LogLevel)
+		// Use default logger with specified level and format
+		client.logger = NewDefaultLoggerWithFormat(cfg.LogLevel, cfg.LogFormat)
 	} else {
 		// Use noop logger when logging is disabled
 		client.logger = NewNoopLogger()
 	}
 
-	// Log initialization
-	client.logger.Info("Glide SDK initialized",
-		Field{"version", "1.0.0"},
-		Field{"baseURL", cfg.BaseURL},
-		Field{"logLevel", cfg.LogLevel.String()},
-	)
+	// Log initialization (skip if using pretty format to avoid clutter)
+	if dl, ok := client.logger.(*defaultLogger); !ok || dl.format != LogFormatPretty {
+		client.logger.Info("Glide SDK initialized",
+			Field{"version", "1.0.0"},
+			Field{"baseURL", cfg.BaseURL},
+			Field{"logLevel", cfg.LogLevel.String()},
+		)
+	}
 
 	// Initialize rate limiter if configured
 	if cfg.RateLimitEnabled {

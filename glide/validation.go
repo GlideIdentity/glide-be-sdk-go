@@ -14,28 +14,28 @@ func ValidatePhoneNumber(phoneNumber string) error {
 
 	// E.164 format validation - strict, no cleaning
 	if !strings.HasPrefix(phoneNumber, "+") {
-		return NewError(ErrCodeInvalidPhoneNumber, "Phone number must be in E.164 format (start with +)")
+		return NewError(ErrCodeValidationError, "Phone number must be in E.164 format (start with +)")
 	}
 
 	if len(phoneNumber) < 8 {
-		return NewError(ErrCodeInvalidPhoneNumber, "Phone number too short for E.164 format (minimum 8 characters including +)")
+		return NewError(ErrCodeValidationError, "Phone number too short for E.164 format (minimum 8 characters including +)")
 	}
 
 	if len(phoneNumber) > 16 {
-		return NewError(ErrCodeInvalidPhoneNumber, "Phone number too long for E.164 format (maximum 15 digits after +)")
+		return NewError(ErrCodeValidationError, "Phone number too long for E.164 format (maximum 15 digits after +)")
 	}
 
 	// Check for any invalid characters (spaces, dashes, parentheses, etc.)
 	// E.164 format only allows + followed by digits
 	validFormat := regexp.MustCompile(`^\+\d+$`)
 	if !validFormat.MatchString(phoneNumber) {
-		return NewError(ErrCodeInvalidPhoneNumber, "Phone number contains invalid characters. E.164 format only allows + followed by digits")
+		return NewError(ErrCodeValidationError, "Phone number contains invalid characters. E.164 format only allows + followed by digits")
 	}
 
 	// Detailed E.164 regex validation
 	e164Regex := regexp.MustCompile(`^\+[1-9]\d{1,14}$`)
 	if !e164Regex.MatchString(phoneNumber) {
-		return NewError(ErrCodeInvalidPhoneNumber, "Invalid E.164 phone number format")
+		return NewError(ErrCodeValidationError, "Invalid E.164 phone number format")
 	}
 
 	return nil
@@ -51,13 +51,13 @@ func ValidatePLMN(plmn *PLMN) error {
 	// MCC validation (3 digits) - no range check for telco labs
 	mccRegex := regexp.MustCompile(`^\d{3}$`)
 	if !mccRegex.MatchString(plmn.MCC) {
-		return NewError(ErrCodeInvalidMCCMNC, "MCC must be exactly 3 digits")
+		return NewError(ErrCodeValidationError, "MCC must be exactly 3 digits")
 	}
 
 	// MNC validation (2 or 3 digits)
 	mncRegex := regexp.MustCompile(`^\d{2,3}$`)
 	if !mncRegex.MatchString(plmn.MNC) {
-		return NewError(ErrCodeInvalidMCCMNC, "MNC must be 2 or 3 digits")
+		return NewError(ErrCodeValidationError, "MNC must be 2 or 3 digits")
 	}
 
 	// No range validation - allowing unofficial MCCs for telco labs
@@ -97,7 +97,7 @@ func ValidateUseCaseRequirements(useCase UseCase, phoneNumber string, plmn *PLMN
 	case UseCaseGetPhoneNumber:
 		// GetPhoneNumber: We don't know the phone number, need PLMN
 		if phoneNumber != "" {
-			return NewError(ErrCodeInvalidParameters, "Phone number should not be provided for GetPhoneNumber use case")
+			return NewError(ErrCodeValidationError, "Phone number should not be provided for GetPhoneNumber use case")
 		}
 		if plmn == nil {
 			return NewError(ErrCodeMissingParameters, "PLMN (MCC/MNC) is required for GetPhoneNumber use case")

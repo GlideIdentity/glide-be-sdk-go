@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/glideidentity/glide-go-sdk/glide"
+	glide "github.com/glideidentity/glide-go-sdk"
 )
 
 // This example demonstrates MagicAuth service specifically
@@ -93,8 +93,8 @@ func verifyPhoneNumber(ctx context.Context, client *glide.Client) error {
 
 	// Step 3: Verify the phone number
 	verifyReq := &glide.VerifyPhoneNumberRequest{
-		SessionInfo: &prepareResp.Session,
-		Credential:  credentialResponse,
+		Session:    &prepareResp.Session,
+		Credential: credentialResponse,
 	}
 
 	verifyResp, err := client.MagicAuth.VerifyPhoneNumber(ctx, verifyReq)
@@ -142,8 +142,8 @@ func getPhoneNumber(ctx context.Context, client *glide.Client) error {
 	}
 
 	getReq := &glide.GetPhoneNumberRequest{
-		SessionInfo: &prepareResp.Session,
-		Credential:  credentialResponse,
+		Session:    &prepareResp.Session,
+		Credential: credentialResponse,
 	}
 
 	getResp, err := client.MagicAuth.GetPhoneNumber(ctx, getReq)
@@ -178,7 +178,7 @@ func demonstrateErrorHandling(ctx context.Context, client *glide.Client) {
 			case glide.ErrCodeCarrierNotEligible:
 				fmt.Println("→ Fallback: Use alternative verification method")
 
-			case glide.ErrCodeInvalidSessionState:
+			case glide.ErrCodeSessionNotFound:
 				fmt.Println("→ Action: Restart the authentication flow")
 
 			case glide.ErrCodeRateLimitExceeded:
@@ -186,7 +186,7 @@ func demonstrateErrorHandling(ctx context.Context, client *glide.Client) {
 					fmt.Printf("→ Wait: Retry after %v seconds\n", retryAfter)
 				}
 
-			case glide.ErrCodeInvalidParameters:
+			case glide.ErrCodeValidationError:
 				fmt.Println("→ Fix: Check request parameters")
 
 			default:

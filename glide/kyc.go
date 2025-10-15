@@ -32,12 +32,12 @@ func (s *kycService) Match(ctx context.Context, req *KYCMatchRequest) (*KYCMatch
 	// At least one field besides phone number should be provided for matching
 	if req.Name == "" && req.GivenName == "" && req.FamilyName == "" &&
 		req.BirthDate == "" && req.Email == "" && req.Address == nil && req.IDDocument == "" {
-		return nil, NewError(ErrCodeInvalidParameters, "At least one field to match is required")
+		return nil, NewError(ErrCodeMissingParameters, "At least one field to match is required")
 	}
 
 	// Validate birth date format if provided
 	if req.BirthDate != "" && !isValidDateFormat(req.BirthDate) {
-		return nil, NewError(ErrCodeInvalidParameters, "Birth date must be in YYYY-MM-DD format")
+		return nil, NewError(ErrCodeValidationError, "Birth date must be in YYYY-MM-DD format")
 	}
 
 	// Build API request - only include non-empty fields
@@ -68,7 +68,7 @@ func (s *kycService) Match(ctx context.Context, req *KYCMatchRequest) (*KYCMatch
 	}
 
 	// Make API call
-	respData, err := s.client.doRequest(ctx, "POST", "/kyc/match", apiReq)
+	respData, err := s.client.doRequest(ctx, "POST", "/kyc-match/match", apiReq)
 	if err != nil {
 		return nil, err
 	}

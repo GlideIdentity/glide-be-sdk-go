@@ -42,11 +42,22 @@ type ClientInfo struct {
 }
 
 // PrepareResponse contains the authentication preparation result
+// SessionMetadata contains metadata for the session
+type SessionMetadata struct {
+	Nonce  string `json:"nonce"`
+	EncKey string `json:"enc_key"`
+}
+
 // SessionInfo contains session information for authentication flow
+// Matches the actual API response structure with nested metadata
 type SessionInfo struct {
-	SessionKey string `json:"session_key"`
-	Nonce      string `json:"nonce"`
-	EncKey     string `json:"enc_key"`
+	SessionKey   string           `json:"session_key"`
+	Metadata     *SessionMetadata `json:"metadata,omitempty"`
+	ProtocolType string           `json:"protocol_type,omitempty"`
+
+	// Legacy flat fields for backward compatibility (deprecated)
+	Nonce  string `json:"nonce,omitempty"`
+	EncKey string `json:"enc_key,omitempty"`
 }
 
 type PrepareResponse struct {
@@ -68,12 +79,13 @@ type PrepareResponse struct {
 }
 
 // VerifyPhoneNumberRequest requests phone number verification
+// This matches what the client SDK sends
 type VerifyPhoneNumberRequest struct {
-	// SessionInfo from the prepare response (includes session_key, nonce, enc_key)
-	SessionInfo *SessionInfo `json:"session"`
+	// Session from the prepare response (can be object or raw JSON)
+	Session interface{} `json:"session"`
 
-	// Credential from the Digital Credentials API (vp_token)
-	Credential map[string]interface{} `json:"response"`
+	// Credential from the Digital Credentials API (JWT string)
+	Credential interface{} `json:"credential"`
 }
 
 // VerifyPhoneNumberResponse contains the verification result
@@ -86,12 +98,13 @@ type VerifyPhoneNumberResponse struct {
 }
 
 // GetPhoneNumberRequest requests phone number retrieval
+// This matches what the client SDK sends
 type GetPhoneNumberRequest struct {
-	// SessionInfo from the prepare response (includes session_key, nonce, enc_key)
-	SessionInfo *SessionInfo `json:"session"`
+	// Session from the prepare response (can be object or raw JSON)
+	Session interface{} `json:"session"`
 
-	// Credential from the Digital Credentials API (vp_token)
-	Credential map[string]interface{} `json:"response"`
+	// Credential from the Digital Credentials API (JWT string)
+	Credential interface{} `json:"credential"`
 }
 
 // GetPhoneNumberResponse contains the retrieved phone number

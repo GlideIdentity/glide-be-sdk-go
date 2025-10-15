@@ -70,7 +70,7 @@ func testVerifyPhoneNumber(client *glide.Client) error {
 				fmt.Printf("⚠️  Carrier not eligible: %s\n", glideErr.Message)
 				fmt.Printf("   Request ID: %s\n", glideErr.RequestID)
 				return nil // Not really an error for testing
-			case glide.ErrCodeUnauthorized:
+			case glide.ErrCodeInternalServerError:
 				return fmt.Errorf("API key is invalid or missing")
 			default:
 				return fmt.Errorf("API error [%s]: %s", glideErr.Code, glideErr.Message)
@@ -93,7 +93,7 @@ func testVerifyPhoneNumber(client *glide.Client) error {
 
 	// Verify the phone number
 	verifyReq := &glide.VerifyPhoneNumberRequest{
-		SessionInfo: &prepareResp.Session,
+		Session: &prepareResp.Session,
 		Credential: map[string]interface{}{
 			"vp_token": "simulated-credential-token",
 		},
@@ -152,7 +152,7 @@ func testGetPhoneNumber(client *glide.Client) error {
 
 	// Get the phone number
 	getReq := &glide.GetPhoneNumberRequest{
-		SessionInfo: &prepareResp.Session,
+		Session: &prepareResp.Session,
 		Credential: map[string]interface{}{
 			"vp_token": "simulated-token-with-phone-claim",
 		},

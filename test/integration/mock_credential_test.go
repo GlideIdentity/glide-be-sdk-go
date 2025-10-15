@@ -70,7 +70,7 @@ func TestMockCredentialProcessing(t *testing.T) {
 
 	t.Run("should handle missing aggregator ID in vp_token", func(t *testing.T) {
 		req := &glide.GetPhoneNumberRequest{
-			SessionInfo: &prepareResult.Session,
+			Session: &prepareResult.Session,
 			Credential:  mockCredentialResponses.MissingGlide,
 		}
 
@@ -86,7 +86,7 @@ func TestMockCredentialProcessing(t *testing.T) {
 
 	t.Run("should handle empty vp_token", func(t *testing.T) {
 		req := &glide.GetPhoneNumberRequest{
-			SessionInfo: &prepareResult.Session,
+			Session: &prepareResult.Session,
 			Credential:  mockCredentialResponses.EmptyVPToken,
 		}
 
@@ -102,7 +102,7 @@ func TestMockCredentialProcessing(t *testing.T) {
 
 	t.Run("should handle completely invalid credential format", func(t *testing.T) {
 		req := &glide.GetPhoneNumberRequest{
-			SessionInfo: &prepareResult.Session,
+			Session: &prepareResult.Session,
 			Credential:  mockCredentialResponses.InvalidFormat,
 		}
 
@@ -118,7 +118,7 @@ func TestMockCredentialProcessing(t *testing.T) {
 
 	t.Run("should handle invalid JWT token from server", func(t *testing.T) {
 		req := &glide.GetPhoneNumberRequest{
-			SessionInfo: &prepareResult.Session,
+			Session: &prepareResult.Session,
 			Credential:  mockCredentialResponses.InvalidToken,
 		}
 
@@ -141,7 +141,7 @@ func TestMockCredentialProcessing(t *testing.T) {
 		}
 
 		req := &glide.GetPhoneNumberRequest{
-			SessionInfo: expiredSession,
+			Session: expiredSession,
 			Credential:  mockCredentialResponses.ValidTS43,
 		}
 
@@ -171,7 +171,7 @@ func TestMockCredentialProcessing(t *testing.T) {
 
 		// Try to verify with a MOCK credential (not a real one from actual device)
 		req := &glide.VerifyPhoneNumberRequest{
-			SessionInfo: &verifyPrepare.Session,
+			Session: &verifyPrepare.Session,
 			Credential:  mockCredentialResponses.ValidTS43, // Mock/forged credential
 		}
 
@@ -195,7 +195,7 @@ func TestMockCredentialProcessing(t *testing.T) {
 		}
 
 		req := &glide.GetPhoneNumberRequest{
-			SessionInfo: expiredSession,
+			Session: expiredSession,
 			Credential:  mockCredentialResponses.ValidTS43,
 		}
 

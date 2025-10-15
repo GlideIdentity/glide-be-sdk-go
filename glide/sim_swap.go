@@ -74,7 +74,7 @@ func (s *simSwapService) GetLastSwapDate(ctx context.Context, req *SimSwapDateRe
 	}
 
 	// Make API call
-	respData, err := s.client.doRequest(ctx, "POST", "/sim-swap/last-swap-date", apiReq)
+	respData, err := s.client.doRequest(ctx, "POST", "/sim-swap/retrieve-date", apiReq)
 	if err != nil {
 		return nil, err
 	}

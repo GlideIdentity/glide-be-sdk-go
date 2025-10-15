@@ -23,37 +23,37 @@ func TestPhoneNumberValidation(t *testing.T) {
 			name:        "reject phone without + prefix",
 			phoneNumber: testPhoneNumbers.MissingPlus,
 			expectError: true,
-			errorCode:   glide.ErrCodeInvalidPhoneNumber,
+			errorCode:   glide.ErrCodeValidationError,
 		},
 		{
 			name:        "reject phone with spaces",
 			phoneNumber: testPhoneNumbers.WithSpaces,
 			expectError: true,
-			errorCode:   glide.ErrCodeInvalidPhoneNumber,
+			errorCode:   glide.ErrCodeValidationError,
 		},
 		{
 			name:        "reject phone with dashes",
 			phoneNumber: testPhoneNumbers.WithDashes,
 			expectError: true,
-			errorCode:   glide.ErrCodeInvalidPhoneNumber,
+			errorCode:   glide.ErrCodeValidationError,
 		},
 		{
 			name:        "reject too short phone",
 			phoneNumber: testPhoneNumbers.ShortNumber,
 			expectError: true,
-			errorCode:   glide.ErrCodeInvalidPhoneNumber,
+			errorCode:   glide.ErrCodeValidationError,
 		},
 		{
 			name:        "reject too long phone",
 			phoneNumber: testPhoneNumbers.LongNumber,
 			expectError: true,
-			errorCode:   glide.ErrCodeInvalidPhoneNumber,
+			errorCode:   glide.ErrCodeValidationError,
 		},
 		{
 			name:        "reject non-numeric characters",
 			phoneNumber: testPhoneNumbers.NonNumeric,
 			expectError: true,
-			errorCode:   glide.ErrCodeInvalidPhoneNumber,
+			errorCode:   glide.ErrCodeValidationError,
 		},
 	}
 
@@ -94,7 +94,7 @@ func TestPLMNValidation(t *testing.T) {
 
 		glideErr, ok := err.(*glide.Error)
 		require.True(t, ok)
-		assert.Equal(t, glide.ErrCodeInvalidMCCMNC, glideErr.Code)
+		assert.Equal(t, glide.ErrCodeValidationError, glideErr.Code)
 		assert.Contains(t, glideErr.Message, "MCC")
 		t.Log("✅ Correctly rejected invalid MCC")
 	})
@@ -110,7 +110,7 @@ func TestPLMNValidation(t *testing.T) {
 
 		glideErr, ok := err.(*glide.Error)
 		require.True(t, ok)
-		assert.Equal(t, glide.ErrCodeInvalidMCCMNC, glideErr.Code)
+		assert.Equal(t, glide.ErrCodeValidationError, glideErr.Code)
 		assert.Contains(t, glideErr.Message, "MNC")
 		t.Log("✅ Correctly rejected invalid MNC")
 	})

@@ -360,11 +360,11 @@ func handleGlideError(w http.ResponseWriter, err error) {
 			status = http.StatusUnprocessableEntity
 		case glide.ErrCodeBadRequest, glide.ErrCodeValidationError:
 			status = http.StatusBadRequest
-		case glide.ErrCodeUnauthorized:
+		case glide.ErrCodeInternalServerError:
 			status = http.StatusUnauthorized
 		case glide.ErrCodeRateLimitExceeded:
 			status = http.StatusTooManyRequests
-		case glide.ErrCodeInvalidSessionState:
+		case glide.ErrCodeSessionNotFound:
 			status = http.StatusConflict
 		}
 

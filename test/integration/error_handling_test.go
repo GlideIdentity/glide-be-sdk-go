@@ -87,7 +87,7 @@ func TestValidationErrors(t *testing.T) {
 		glideErr, ok := err.(*glide.Error)
 		require.True(t, ok)
 		// Client-side validation might not set status
-		assert.Equal(t, glide.ErrCodeInvalidPhoneNumber, glideErr.Code)
+		assert.Equal(t, glide.ErrCodeValidationError, glideErr.Code)
 	})
 
 	t.Run("should return 400 for invalid PLMN", func(t *testing.T) {
@@ -102,7 +102,7 @@ func TestValidationErrors(t *testing.T) {
 		glideErr, ok := err.(*glide.Error)
 		require.True(t, ok)
 		// Client-side validation might not set status
-		assert.Equal(t, glide.ErrCodeInvalidMCCMNC, glideErr.Code)
+		assert.Equal(t, glide.ErrCodeValidationError, glideErr.Code)
 	})
 }
 
@@ -126,7 +126,7 @@ func TestErrorDetails(t *testing.T) {
 
 		// Try with invalid credential
 		req := &glide.GetPhoneNumberRequest{
-			SessionInfo: &prepareResult.Session,
+			Session: &prepareResult.Session,
 			Credential: map[string]interface{}{
 				"invalid": "credential",
 			},
@@ -233,10 +233,8 @@ func TestErrorDetails(t *testing.T) {
 
 		// Type-safe error code checking
 		switch glideErr.Code {
-		case glide.ErrCodeInvalidPhoneNumber:
-			t.Log("✅ Type-safe error code checking works")
 		case glide.ErrCodeValidationError:
-			t.Log("✅ Type-safe error code checking works (VALIDATION_ERROR)")
+			t.Log("✅ Type-safe error code checking works")
 		default:
 			t.Errorf("Unexpected error code: %s", glideErr.Code)
 		}
@@ -263,7 +261,7 @@ func TestBrowserCompatibilityErrors(t *testing.T) {
 			mcc:           "310",
 			mnc:           "260",
 			expectError:   true,
-			errorContains: "compatible platform",
+			errorContains: "not supported",
 		},
 		{
 			name:          "T-Mobile with iOS Safari",
@@ -279,7 +277,7 @@ func TestBrowserCompatibilityErrors(t *testing.T) {
 			mcc:           "310",
 			mnc:           "260",
 			expectError:   true,
-			errorContains: "compatible platform",
+			errorContains: "not supported",
 		},
 		{
 			name:        "T-Mobile with Chrome Desktop (should succeed)",

@@ -40,10 +40,12 @@ func (s *magicAuthService) Prepare(ctx context.Context, req *PrepareRequest) (*P
 		apiReq["phone_number"] = req.PhoneNumber
 	}
 
-	// Flatten PLMN into mcc and mnc at top level
+	// Add PLMN as nested object to match Node.js SDK structure
 	if req.PLMN != nil {
-		apiReq["mcc"] = req.PLMN.MCC
-		apiReq["mnc"] = req.PLMN.MNC
+		apiReq["plmn"] = map[string]string{
+			"mcc": req.PLMN.MCC,
+			"mnc": req.PLMN.MNC,
+		}
 	}
 
 	if req.ConsentData != nil {
@@ -55,21 +57,10 @@ func (s *magicAuthService) Prepare(ctx context.Context, req *PrepareRequest) (*P
 		apiReq["client_info"] = req.ClientInfo
 	}
 
-	// Debug logging
-	if s.client.logger != nil {
-		reqBytes, _ := json.Marshal(apiReq)
-		s.client.logger.Debug("Prepare request", Field{Key: "body", Value: string(reqBytes)})
-	}
-
 	// Make API call
-	respData, err := s.client.doRequest(ctx, "POST", "/magic-auth/v2/auth/prep", apiReq)
+	respData, err := s.client.doRequest(ctx, "POST", "/magic-auth/v2/auth/prepare", apiReq)
 	if err != nil {
 		return nil, err
-	}
-
-	// Debug logging for response
-	if s.client.logger != nil {
-		s.client.logger.Debug("Prepare response", Field{Key: "body", Value: string(respData)})
 	}
 
 	// Parse response
@@ -88,49 +79,18 @@ func (s *magicAuthService) Prepare(ctx context.Context, req *PrepareRequest) (*P
 // VerifyPhoneNumber verifies a phone number using the credential from Digital Credentials API
 func (s *magicAuthService) VerifyPhoneNumber(ctx context.Context, req *VerifyPhoneNumberRequest) (*VerifyPhoneNumberResponse, error) {
 	// Validate request
-	if req.SessionInfo == nil || req.SessionInfo.SessionKey == "" {
-		return nil, NewError(ErrCodeInvalidParameters, "Session info with session key is required")
+	if req.Session == nil {
+		return nil, NewError(ErrCodeMissingParameters, "Session is required")
 	}
-
 	if req.Credential == nil {
-		return nil, NewError(ErrCodeInvalidParameters, "Credential is required")
+		return nil, NewError(ErrCodeMissingParameters, "Credential is required")
 	}
 
-	// Build API request
-	// Extract the actual SD-JWT string from the vp_token object
-	var ts43dcString string
-	if vpTokenWrapper, ok := req.Credential["vp_token"]; ok {
-		switch vt := vpTokenWrapper.(type) {
-		case string:
-			// If vp_token is already a string, use it directly
-			ts43dcString = vt
-		case map[string]interface{}:
-			// vp_token is an object like {"glide": "actual_jwt_string"}
-			// Extract the first value (the actual JWT)
-			for _, value := range vt {
-				if str, ok := value.(string); ok {
-					ts43dcString = str
-					break
-				}
-			}
-		default:
-			// Fallback: JSON encode the vp_token
-			if encoded, err := json.Marshal(vt); err == nil {
-				ts43dcString = string(encoded)
-			}
-		}
-	}
-
-	// If we still don't have a string, JSON encode the entire credential
-	if ts43dcString == "" {
-		if encoded, err := json.Marshal(req.Credential); err == nil {
-			ts43dcString = string(encoded)
-		}
-	}
-
+	// Build API request - pass through what the client sent
+	// Just like the Node SDK, we pass the session and credential directly
 	apiReq := map[string]interface{}{
-		"session": req.SessionInfo,
-		"ts43_dc": ts43dcString, // Backend expects ts43_dc as a string
+		"session":    req.Session,
+		"credential": s.extractCredentialString(req.Credential),
 	}
 
 	// Call the verify endpoint
@@ -153,49 +113,18 @@ func (s *magicAuthService) VerifyPhoneNumber(ctx context.Context, req *VerifyPho
 // GetPhoneNumber retrieves the phone number using the credential from Digital Credentials API
 func (s *magicAuthService) GetPhoneNumber(ctx context.Context, req *GetPhoneNumberRequest) (*GetPhoneNumberResponse, error) {
 	// Validate request
-	if req.SessionInfo == nil || req.SessionInfo.SessionKey == "" {
-		return nil, NewError(ErrCodeInvalidParameters, "Session info with session key is required")
+	if req.Session == nil {
+		return nil, NewError(ErrCodeMissingParameters, "Session is required")
 	}
-
 	if req.Credential == nil {
-		return nil, NewError(ErrCodeInvalidParameters, "Credential is required")
+		return nil, NewError(ErrCodeMissingParameters, "Credential is required")
 	}
 
-	// Build API request
-	// Extract the actual SD-JWT string from the vp_token object
-	var ts43dcString string
-	if vpTokenWrapper, ok := req.Credential["vp_token"]; ok {
-		switch vt := vpTokenWrapper.(type) {
-		case string:
-			// If vp_token is already a string, use it directly
-			ts43dcString = vt
-		case map[string]interface{}:
-			// vp_token is an object like {"glide": "actual_jwt_string"}
-			// Extract the first value (the actual JWT)
-			for _, value := range vt {
-				if str, ok := value.(string); ok {
-					ts43dcString = str
-					break
-				}
-			}
-		default:
-			// Fallback: JSON encode the vp_token
-			if encoded, err := json.Marshal(vt); err == nil {
-				ts43dcString = string(encoded)
-			}
-		}
-	}
-
-	// If we still don't have a string, JSON encode the entire credential
-	if ts43dcString == "" {
-		if encoded, err := json.Marshal(req.Credential); err == nil {
-			ts43dcString = string(encoded)
-		}
-	}
-
+	// Build API request - pass through what the client sent
+	// Just like the Node SDK, we pass the session and credential directly
 	apiReq := map[string]interface{}{
-		"session": req.SessionInfo,
-		"ts43_dc": ts43dcString, // Backend expects ts43_dc as a string
+		"session":    req.Session,
+		"credential": s.extractCredentialString(req.Credential),
 	}
 
 	// Call the get phone number endpoint
@@ -222,11 +151,44 @@ func generateNonce(length int) string {
 	return base64.RawURLEncoding.EncodeToString(bytes)[:length]
 }
 
+// extractCredentialString extracts the credential string from various formats
+// The client SDK sends the credential as a JWT string directly
+func (s *magicAuthService) extractCredentialString(credential interface{}) string {
+	// If it's already a string, use it directly
+	if str, ok := credential.(string); ok {
+		return str
+	}
+
+	// If it's raw JSON containing a string, unmarshal it
+	if jsonBytes, ok := credential.(json.RawMessage); ok {
+		var credStr string
+		if err := json.Unmarshal(jsonBytes, &credStr); err == nil {
+			return credStr
+		}
+	}
+
+	// If it's a map with vp_token field (legacy format)
+	if credMap, ok := credential.(map[string]interface{}); ok {
+		if vpToken, exists := credMap["vp_token"]; exists {
+			if vpStr, ok := vpToken.(string); ok {
+				return vpStr
+			}
+		}
+	}
+
+	// Fallback: JSON encode the credential
+	if encoded, err := json.Marshal(credential); err == nil {
+		return string(encoded)
+	}
+
+	return ""
+}
+
 // validatePrepareRequest validates the prepare request
 func (s *magicAuthService) validatePrepareRequest(req *PrepareRequest) error {
 	// Validate use case
 	if req.UseCase != UseCaseGetPhoneNumber && req.UseCase != UseCaseVerifyPhoneNumber {
-		return NewError(ErrCodeInvalidParameters, "Invalid use case")
+		return NewError(ErrCodeValidationError, "Invalid use case")
 	}
 
 	// Validate use case requirements (handles the business logic)

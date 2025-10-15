@@ -9,10 +9,27 @@ NC='\033[0m' # No Color
 echo -e "${GREEN}🚀 Go SDK Integration Test${NC}"
 echo "=========================="
 
+# Check for .env file and load it
+if [ -f ".env" ]; then
+    echo -e "${YELLOW}Loading .env file...${NC}"
+    export $(grep -v '^#' .env | xargs)
+    echo -e "${GREEN}✅ .env file loaded${NC}"
+elif [ -f "test-server/.env" ]; then
+    echo -e "${YELLOW}Loading test-server/.env file...${NC}"
+    export $(grep -v '^#' test-server/.env | xargs)
+    echo -e "${GREEN}✅ test-server/.env file loaded${NC}"
+fi
+
 # Check if API key is set
 if [ -z "$GLIDE_API_KEY" ]; then
     echo -e "${RED}❌ GLIDE_API_KEY not set${NC}"
-    echo "Please set GLIDE_API_KEY environment variable"
+    echo "Please set GLIDE_API_KEY in .env file or as environment variable"
+    echo ""
+    echo "To create .env file:"
+    echo "  echo 'GLIDE_API_KEY=your_api_key_here' > .env"
+    echo "Or:"
+    echo "  cp test-server/env.example test-server/.env"
+    echo "  # Then edit test-server/.env with your API key"
     exit 1
 fi
 
