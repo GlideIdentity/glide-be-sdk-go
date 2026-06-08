@@ -1,29 +1,23 @@
-# Glide Go SDK
+# Magic Auth Go SDK
 
-Official Go SDK for Glide Identity's phone authentication services.
+Go SDK for the Magic Auth Aggregator API - phone number authentication and verification using digital credentials.
 
-**Documentation**: https://docs.glideidentity.com
+## Features
 
-## Architecture
-
-```
-┌─────────────┐      ┌─────────────┐      ┌─────────────────┐
-│    Your     │      │    Your     │      │  Glide Services │
-│  Frontend   │ ──── │   Backend   │ ──── │                 │
-│             │      │             │      │                 │
-│ glide-fe-sdk│      │ glide-be-sdk│      │  magic-auth API │
-└─────────────┘      └─────────────┘      └─────────────────┘
-```
-
-This SDK runs in your backend application, handling secure communication with Glide's authentication services. It includes HTTP client, logging, retry logic, and error handling.
+- **Zero external dependencies** - Uses only Go standard library
+- **BYOC (Bring Your Own Client)** - Implement `HTTPClient` interface for custom HTTP handling
+- **BYOL (Bring Your Own Logger)** - Implement `Logger` interface for custom logging
+- **Thread-safe token management** - Automatic token refresh with caching
+- **Context support** - Full `context.Context` integration for cancellation/timeouts
+- **Idiomatic Go error handling** - Sentinel errors with `errors.Is()` and `errors.As()`
 
 ## Installation
 
 ```bash
-go get github.com/GlideIdentity/glide-be-sdk-go
+go get github.com/glide/magic-auth-be-sdks/sdks/go
 ```
 
-## Quickstart
+## Quick Start
 
 ```go
 package main
@@ -31,179 +25,256 @@ package main
 import (
     "context"
     "fmt"
-    "os"
+    "log"
 
-    glide "github.com/GlideIdentity/glide-be-sdk-go"
+    "github.com/glide/magic-auth-be-sdks/sdks/go/magicauth"
 )
 
 func main() {
-    client := glide.New(
-        glide.WithClientCredentials(
-            os.Getenv("GLIDE_CLIENT_ID"),
-            os.Getenv("GLIDE_CLIENT_SECRET"),
-        ),
-    )
-
-    resp, err := client.MagicalAuth.Prepare(context.Background(), &glide.PrepareRequest{
-        UseCase:    glide.UseCaseGetPhoneNumber,
-        PLMN:       &glide.PLMN{MCC: "310", MNC: "260"},
-        ClientInfo: &glide.ClientInfo{Platform: "web"},
+    // Create client
+    client, err := magicauth.NewClient(magicauth.Config{
+        ClientID:     "your-client-id",
+        ClientSecret: "your-client-secret",
     })
     if err != nil {
-        panic(err)
+        log.Fatal(err)
     }
 
-    fmt.Printf("Strategy: %s\n", resp.AuthenticationStrategy)
-    fmt.Printf("Session: %s\n", resp.Session.SessionKey)
-}
-```
+    ctx := context.Background()
 
-## Production Usage
-
-In production, your backend receives requests from a frontend application using a Glide frontend SDK:
-
-```go
-package main
-
-import (
-    "encoding/json"
-    "net/http"
-    "os"
-    "time"
-
-    glide "github.com/GlideIdentity/glide-be-sdk-go"
-)
-
-var client = glide.New(
-    glide.WithClientCredentials(
-        os.Getenv("GLIDE_CLIENT_ID"),
-        os.Getenv("GLIDE_CLIENT_SECRET"),
-    ),
-    glide.WithTimeout(30*time.Second),
-)
-
-func main() {
-    http.HandleFunc("/api/phone-auth/prepare", handlePrepare)
-    http.HandleFunc("/api/phone-auth/process", handleProcess)
-    http.ListenAndServe(":8080", nil)
-}
-
-func handlePrepare(w http.ResponseWriter, r *http.Request) {
-    var req glide.PrepareRequest
-    json.NewDecoder(r.Body).Decode(&req)
-
-    resp, err := client.MagicalAuth.Prepare(r.Context(), &req)
+    // Prepare authentication
+    prepareResp, err := client.Prepare(ctx, &magicauth.PrepareRequest{
+        PhoneNumber: "+14155551234",
+        Nonce:       "random-base64url-nonce",
+        UseCase:     magicauth.UseCaseVerifyPhoneNumber,
+    })
     if err != nil {
-        handleError(w, err)
-        return
+        log.Fatal(err)
     }
 
-    json.NewEncoder(w).Encode(resp)
-}
+    fmt.Printf("Strategy: %s\n", prepareResp.AuthenticationStrategy)
+    fmt.Printf("Session Key: %s\n", prepareResp.Session.SessionKey)
 
-func handleProcess(w http.ResponseWriter, r *http.Request) {
-    var req glide.ProcessRequest
-    json.NewDecoder(r.Body).Decode(&req)
-
-    switch req.UseCase {
-    case glide.UseCaseGetPhoneNumber:
-        resp, err := client.MagicalAuth.GetPhoneNumber(r.Context(), &glide.GetPhoneNumberRequest{
-            Session:    req.Session,
-            Credential: req.Credential,
-        })
-        if err != nil {
-            handleError(w, err)
-            return
-        }
-        json.NewEncoder(w).Encode(resp)
-
-    case glide.UseCaseVerifyPhoneNumber:
-        resp, err := client.MagicalAuth.VerifyPhoneNumber(r.Context(), &glide.VerifyPhoneNumberRequest{
-            Session:    req.Session,
-            Credential: req.Credential,
-        })
-        if err != nil {
-            handleError(w, err)
-            return
-        }
-        json.NewEncoder(w).Encode(resp)
+    // After obtaining credential from the device...
+    verifyResp, err := client.VerifyPhoneNumber(ctx, &magicauth.VerifyPhoneNumberRequest{
+        Session:    prepareResp.Session,
+        Credential: "sd-jwt-credential-from-device",
+    })
+    if err != nil {
+        log.Fatal(err)
     }
-}
 
-func handleError(w http.ResponseWriter, err error) {
-    if glideErr, ok := err.(*glide.MagicalAuthError); ok {
-        w.WriteHeader(glideErr.Status)
-        json.NewEncoder(w).Encode(glideErr)
-        return
-    }
-    http.Error(w, err.Error(), http.StatusInternalServerError)
+    fmt.Printf("Verified: %v\n", verifyResp.Verified)
 }
 ```
-
-## Report Invocation
-
-Reports that the user has started the authentication flow:
-
-```go
-resp, err := client.MagicalAuth.ReportInvocation(ctx, &glide.ReportInvocationRequest{
-    SessionID: session.SessionKey,
-})
-```
-
-This call is optional and can be made asynchronously (`go client.MagicalAuth.ReportInvocation(...)`) without blocking the authentication flow.
 
 ## Configuration
 
 ```go
-client := glide.New(
-    glide.WithClientCredentials(clientID, clientSecret),
-    glide.WithBaseURL("https://api.glideidentity.app"),
-    glide.WithTimeout(30*time.Second),
-    glide.WithRetry(3, time.Second),
-    glide.WithLogLevel(glide.LogLevelDebug),
-)
+client, err := magicauth.NewClient(magicauth.Config{
+    // Required
+    ClientID:     "your-client-id",
+    ClientSecret: "your-client-secret",
+    
+    // Optional (with defaults)
+    BaseURL:    "https://api.glideidentity.app",  // Production API
+    Timeout:    30 * time.Second,                  // HTTP timeout
+    HTTPClient: nil,                               // Custom HTTP client
+    Logger:     nil,                               // Custom logger
+})
 ```
 
-| Option | Env Variable | Description |
-|--------|--------------|-------------|
-| `WithClientCredentials(id, secret)` | `GLIDE_CLIENT_ID`, `GLIDE_CLIENT_SECRET` | OAuth2 credentials (required) |
-| `WithBaseURL(url)` | `GLIDE_API_BASE_URL` | API base URL |
-| `WithTimeout(d)` | — | Request timeout |
-| `WithRetry(n, d)` | — | Retry count and delay |
-| `WithHTTPClient(c)` | — | Custom HTTP client |
-| `WithLogLevel(l)` | `GLIDE_LOG_LEVEL` | Log level (debug, info, warn, error) |
-| `WithTokenRefreshBuffer(s)` | — | Seconds before token expiry to refresh (default: 60) |
+## API Methods
+
+### Prepare
+
+Prepares authentication and returns strategy-specific data.
+
+```go
+resp, err := client.Prepare(ctx, &magicauth.PrepareRequest{
+    PhoneNumber: "+14155551234",          // Required for VerifyPhoneNumber
+    Nonce:       "base64url-nonce",       // Required
+    UseCase:     magicauth.UseCaseVerifyPhoneNumber,
+    PLMN:        &magicauth.PLMN{MCC: "310", MNC: "260"},  // Optional
+    ClientInfo:  &magicauth.ClientInfo{UserAgent: "..."},  // Optional
+})
+```
+
+### VerifyPhoneNumber
+
+Verifies a phone number using digital credentials.
+
+```go
+resp, err := client.VerifyPhoneNumber(ctx, &magicauth.VerifyPhoneNumberRequest{
+    Session:    sessionInfo,
+    Credential: "sd-jwt-credential",
+})
+
+if resp.Verified {
+    fmt.Println("Phone number verified!")
+}
+```
+
+### GetPhoneNumber
+
+Retrieves the device's phone number.
+
+```go
+resp, err := client.GetPhoneNumber(ctx, &magicauth.GetPhoneNumberRequest{
+    Session:    sessionInfo,
+    Credential: "sd-jwt-credential",
+})
+
+fmt.Printf("Phone: %s\n", resp.PhoneNumber)
+```
+
+### CheckStatus / CheckStatusPublic
+
+Polls for verification status.
+
+```go
+// Authenticated endpoint
+resp, err := client.CheckStatus(ctx, sessionKey)
+
+// Public endpoint (no auth required)
+resp, err := client.CheckStatusPublic(ctx, sessionKey)
+
+switch resp.Status {
+case magicauth.StatusPending:
+    // Still waiting
+case magicauth.StatusCompleted:
+    // Done!
+case magicauth.StatusFailed:
+    // Check resp.Error
+}
+```
+
+### ReportInvocation
+
+Reports user interaction for analytics.
+
+```go
+resp, err := client.ReportInvocation(ctx, &magicauth.ReportInvocationRequest{
+    SessionID: sessionID,
+})
+```
 
 ## Error Handling
 
+Use Go's `errors.Is()` and `errors.As()` for error handling:
+
 ```go
-resp, err := client.MagicalAuth.Prepare(ctx, req)
+resp, err := client.Prepare(ctx, req)
 if err != nil {
-    if glideErr, ok := err.(*glide.MagicalAuthError); ok {
-        switch glideErr.Code {
-        case glide.ErrCodeConfigurationError:
-            // Missing credentials or invalid configuration
-        case glide.ErrCodeCarrierNotEligible:
-            // Carrier not supported
-        case glide.ErrCodeInvalidSession:
-            // Session expired
-        case glide.ErrCodeRateLimitExceeded:
-            // Too many requests
-        }
+    // Check for specific error types
+    if errors.Is(err, magicauth.ErrCarrierNotEligible) {
+        // Carrier not supported
+    } else if errors.Is(err, magicauth.ErrSessionNotFound) {
+        // Session expired
+    } else if errors.Is(err, magicauth.ErrRateLimit) {
+        // Rate limited - check RetryAfter
+    }
+
+    // Get detailed error information
+    var apiErr *magicauth.APIError
+    if errors.As(err, &apiErr) {
+        fmt.Printf("Code: %s\n", apiErr.Code)
+        fmt.Printf("Message: %s\n", apiErr.Message)
+        fmt.Printf("RequestID: %s\n", apiErr.RequestID)
+        fmt.Printf("RetryAfter: %d\n", apiErr.RetryAfter)
     }
 }
 ```
 
-## Core Package
+### Sentinel Errors
 
-For minimal dependencies and full control over HTTP requests, use the core package:
+| Error | Description |
+|-------|-------------|
+| `ErrBadRequest` | Invalid request parameters |
+| `ErrUnauthorized` | Authentication failed |
+| `ErrValidation` | Validation error |
+| `ErrSessionNotFound` | Session not found or expired |
+| `ErrCarrierNotEligible` | Carrier not supported |
+| `ErrUnsupportedPlatform` | Platform not supported |
+| `ErrPhoneNumberMismatch` | Phone number doesn't match |
+| `ErrInvalidCredential` | Invalid credential format |
+| `ErrRateLimit` | Rate limit exceeded |
+| `ErrInternalServer` | Server error |
 
-```bash
-go get github.com/GlideIdentity/glide-be-sdk-go/core
+## Custom HTTP Client (BYOC)
+
+Implement the `HTTPClient` interface:
+
+```go
+type HTTPClient interface {
+    Do(req *http.Request) (*http.Response, error)
+}
+
+// Example: Add custom headers
+type customClient struct {
+    base http.Client
+}
+
+func (c *customClient) Do(req *http.Request) (*http.Response, error) {
+    req.Header.Set("X-Custom-Header", "value")
+    return c.base.Do(req)
+}
+
+client, _ := magicauth.NewClient(magicauth.Config{
+    ClientID:     "...",
+    ClientSecret: "...",
+    HTTPClient:   &customClient{},
+})
 ```
 
-See [core/README.md](./core/README.md) for details.
+## Custom Logger (BYOL)
+
+Implement the `Logger` interface:
+
+```go
+type Logger interface {
+    Debug(msg string, keysAndValues ...any)
+    Info(msg string, keysAndValues ...any)
+    Warn(msg string, keysAndValues ...any)
+    Error(msg string, keysAndValues ...any)
+}
+
+// Example: Wrap zap logger
+type zapLogger struct {
+    *zap.SugaredLogger
+}
+
+func (l *zapLogger) Debug(msg string, kv ...any) { l.Debugw(msg, kv...) }
+func (l *zapLogger) Info(msg string, kv ...any)  { l.Infow(msg, kv...) }
+func (l *zapLogger) Warn(msg string, kv ...any)  { l.Warnw(msg, kv...) }
+func (l *zapLogger) Error(msg string, kv ...any) { l.Errorw(msg, kv...) }
+
+client, _ := magicauth.NewClient(magicauth.Config{
+    ClientID:     "...",
+    ClientSecret: "...",
+    Logger:       &zapLogger{sugar},
+})
+```
+
+## Testing
+
+Run tests:
+
+```bash
+cd sdks/go
+go test ./...
+```
+
+Run with verbose output:
+
+```bash
+go test -v ./...
+```
+
+## Version
+
+SDK Version: 2.0.1 (aligned with API version)
 
 ## License
 
-Use of this SDK is permitted solely to enable your use of Glide Identity Inc.'s services. All other use of this SDK is prohibited. All other rights are reserved.
+See LICENSE file in the repository root.
