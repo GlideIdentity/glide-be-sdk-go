@@ -2,6 +2,7 @@ package magicalauth
 
 import (
 	"encoding/json"
+	"time"
 )
 
 // UseCase represents the authentication use case.
@@ -116,9 +117,10 @@ type ConsentData struct {
 
 // PrepareOptions contains advanced/optional configuration for prepare requests.
 type PrepareOptions struct {
-	ParentSessionID string   `json:"parent_session_id,omitempty"`
-	Theme           Theme    `json:"theme,omitempty"`
-	LinkType        LinkType `json:"link_type,omitempty"`
+	ParentSessionID    string   `json:"parent_session_id,omitempty"`
+	Theme              Theme    `json:"theme,omitempty"`
+	LinkType           LinkType `json:"link_type,omitempty"`
+	SimSwapMaxAgeHours *int     `json:"sim_swap_max_age_hours,omitempty"`
 }
 
 // SessionInfo contains session information from the API.
@@ -207,7 +209,9 @@ type SimSwapInfo struct {
 	RiskLevel   RiskLevel            `json:"risk_level,omitempty"`
 	AgeBand     string               `json:"age_band,omitempty"`
 	CarrierName string               `json:"carrier_name,omitempty"`
-	CheckedAt   string               `json:"checked_at,omitempty"`
+	CheckedAt   time.Time            `json:"checked_at,omitempty"`
+	Swapped     *bool                `json:"swapped,omitempty"`
+	MaxAgeHours int                  `json:"max_age_hours,omitempty"`
 	Reason      SimSwapFailureReason `json:"reason,omitempty"`
 }
 
@@ -388,7 +392,9 @@ type DeviceSwapInfo struct {
 	RiskLevel   RiskLevel `json:"risk_level,omitempty"`
 	AgeBand     string    `json:"age_band,omitempty"`
 	CarrierName string    `json:"carrier_name,omitempty"`
-	CheckedAt   string    `json:"checked_at,omitempty"`
+	CheckedAt   time.Time `json:"checked_at,omitempty"`
+	Swapped     *bool     `json:"swapped,omitempty"`
+	MaxAgeHours int       `json:"max_age_hours,omitempty"`
 }
 
 // PhoneNumberDetails contains parsed components of an E.164 phone number.

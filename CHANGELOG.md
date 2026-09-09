@@ -11,6 +11,11 @@ Major version bump — `ReportInvocationResponse` has a breaking shape change. A
 
 Note on Go module path: a strict Go v2 release requires the module path to include `/v2` (e.g. `github.com/GlideIdentity/glide-be-sdk-go/v3/v2`). This PR updates the CHANGELOG + SDK surface; the module-path rename is a separate follow-up and will be coordinated with the first public release so existing internal consumers can stay on the current path until they're ready.
 
+### Added
+
+- `SimSwapInfo` and `DeviceSwapInfo`: `swapped` (*bool), `max_age_hours` (int); `checked_at` is now `time.Time`.
+- `PrepareOptions.SimSwapMaxAgeHours` (*int) for configurable SIM swap query window (1–2400 hours, server-validated).
+
 ### Changed
 
 - **Breaking**: `ReportInvocationResponse` aligned with the actual backend contract. The backend returns `{"success": true}` (and always has). The previous `{"status": "success"|"error", "message"?}` shape was speculative and never returned by the API.
