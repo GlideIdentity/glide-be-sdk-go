@@ -5,19 +5,50 @@ All notable changes to the Magic Auth Go SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - Unreleased
+## [3.2.0] - 2026-10-08
 
-Major version bump — `ReportInvocationResponse` has a breaking shape change. Any consumer reading `resp.Status` or using the `ReportStatus` / `IsSuccess` / `Success` symbols will fail to compile. Consumers should read `resp.Success` (bool) directly.
+### Added
 
-Note on Go module path: a strict Go v2 release requires the module path to include `/v2` (e.g. `github.com/GlideIdentity/glide-be-sdk-go/v3/v2`). This PR updates the CHANGELOG + SDK surface; the module-path rename is a separate follow-up and will be coordinated with the first public release so existing internal consumers can stay on the current path until they're ready.
+- **`BiometricVerification` on verify and get-phone responses**: `VerifyPhoneNumberResponse` and `GetPhoneNumberResponse` carry `BiometricVerification`, the outcome of the device biometric step, of the new type `BiometricVerification` (`BiometricVerificationVerified`, `BiometricVerificationFailed`, `BiometricVerificationNotEnrolled`, `BiometricVerificationUnsupported`, `BiometricVerificationNotRequested`). On verify it equals the signed record's `biometric_verification` claim. A value outside these five is kept as sent. Treat anything other than `BiometricVerificationVerified` as not verified.
+- **TS43 biometric option**: `PrepareOptions.Biometric` (`*bool`; nil is omitted, an explicit `false` is sent) asks the device to run a biometric step during the TS43 credential ceremony. The outcome comes back as `BiometricVerification`. Ignored on Link; on Desktop (QR), set it on the desktop prepare and the phone inherits it. It never blocks authentication: a device that cannot run it still authenticates.
+- **`Nonce` on verify and get-phone responses**: `VerifyPhoneNumberResponse` and `GetPhoneNumberResponse` carry `Nonce`, the nonce of the session prepare created. On verify it equals the signed record's `nonce` claim.
+- **`RequestID` and `SessionKey` on results**: every response type carries `RequestID`, the same value as the `X-Request-ID` header, to quote to Glide support: `EligibilityResponse`, `PrepareResponse` (and so `PrepareResult`), `VerifyPhoneNumberResponse`, `GetPhoneNumberResponse`, `ReportInvocationResponse`, `CompleteResponse`, `StatusResponse` and `DesktopWaitResponse` (the `*DesktopWaitError` body). `VerifyPhoneNumberResponse`, `GetPhoneNumberResponse`, `ReportInvocationResponse` and `CompleteResponse` also carry `SessionKey`, the session the result is about, so a result can be stored or logged without the request (prepare's is `Session.SessionKey`). `*APIError` carries `SessionKey` once the server has read the session.
+- **`ErrCarrierAppUnavailable` / `CodeCarrierAppUnavailable`**: Desktop (QR) verify answers 422 `CARRIER_APP_UNAVAILABLE` when the phone that scanned the code has no working carrier app. The session cannot continue; start a new QR.
+- **`ErrCarrierRejected` / `CodeCarrierRejected`**: 422 `CARRIER_REJECTED` when the carrier rejected a device-bound (Link or Desktop) authentication. `APIError.Details` carries `carrier_error`, `carrier_error_description` and, when present, `stage` and `error_code`.
+- **Signed verification record**: `VerifyPhoneNumberResponse` carries `VerificationRecord`, a Glide-signed ES256 JWS of the verify result, and `VerificationRecordStatus` (`VerificationRecordStatusSigned` / `VerificationRecordStatusUnavailable`). `Client.VerifyVerificationRecord(ctx, record, *VerificationRecordOptions)` checks it against Glide's record keys at `<baseURL>/.well-known/us/jwks.json`, then issuer, audience, validity window, claim shape and `ExpectedNonce`, and returns `*VerifiedVerificationRecord` (claims plus `SignOffResults`).
+  - Failures are `*VerificationRecordError` with a `VerificationRecordCode*` constant. An empty record fails closed with `RECORD_UNAVAILABLE`, and a record over 16 KiB or one that does not match the claim contract fails `MALFORMED`.
+  - `ExpectedAudience` is the record audience configured in the developer portal (empty checks your client ID). `ExpectedOrigin` is a list; the record's `origin` must equal one entry exactly, else `ORIGIN_MISMATCH`. Link records carry `UNKNOWN`, so leave `UNKNOWN` out of the list to reject them.
+  - `AllowExpired` (bounded by `MaxAuditAge`, 90 days by default) supports audits; `RevokedKIDs` and `Issuer` are optional.
+  - Claims: `ver` `"1.0"`, `jti`, `sub`, `nonce`, `iat`, `nbf`, `exp` (1 to 60 seconds after `iat`), `verified`, `use_case`, `origin`, `biometric_verification`, `sign_offs` (exactly one `carrier` entry), and optional `strategy`, `phone_number_details`, `carrier` and `sim_swap` / `device_swap` with an `age_band` `{from, to}` in hours. Standard library only.
+- **`PrepareOptions.CompletionRedirectURL`**: names where the browser is sent once authentication completes, selecting one of the completion redirect URLs registered on your application. Matching is exact, and an unregistered value is rejected. One OAuth credential can then serve several deployments on different origins. Set it server-side from your deployment's configured origin, never from the request `Host` header or other client-controlled input. If your application registers more than one completion URL, always send it; without it the first registered URL is used.
+- **`PrepareMultiple`**: prepare several phone numbers in one call, with one result per number.
+- **Configurable SIM swap window**: `PrepareOptions.SimSwapMaxAgeHours` (`*int`, 1–2400) sets how far back the SIM and device swap check looks, overriding the carrier's default. `SimSwapInfo` and `DeviceSwapInfo` carry `Swapped` (`*bool`; nil when the carrier gave no determinable age, which is not the same as `false`) and `MaxAgeHours` (the window the answer describes). A carrier that finds no swap inside the window reports `RiskLevelUnknown`.
+- **Optional `ClientInfo.PrivacyMode`**: sent on prepare as `privacy_mode`. When set to `private`, prepare answers 422 `PRIVATE_BROWSING_NOT_SUPPORTED`.
+- **Network check**: `PrepareOptions.NetworkOrigin` (the requesting device's IP as your backend observed it), set on both the desktop prepare and the companion prepare (the request carrying `Options.ParentSessionID`), compares the two devices' egress IPs. The result, `NetworkCheck`, is returned on the companion prepare and on `VerifyPhoneNumberResponse` and `GetPhoneNumberResponse`. `Match` is `same_ip`, `same_subnet`, `different` or `unknown`; branch on it. When the two public egress IPs were compared, `Family` is `ipv4` or `ipv6` and `PrefixBits` is the number of matching leading bits (0–32 for IPv4, 0–128 for IPv6; the maximum means the same egress IP); `PrefixBits` is a `*int`, so a real 0 (nothing in common) is distinct from nil; on `unknown`, `Family` is empty, `PrefixBits` is nil, and both are omitted when the result is serialized. `DesktopIP` and `CompanionIP` are the addresses compared. It is a signal, not a gate; you choose the threshold. `NetworkCheck` is nil when the desktop prepare did not send `NetworkOrigin`. Derive the IP server-side; never trust a client-supplied value. New types: `NetworkOrigin`, `NetworkCheck`.
 
 ### Changed
 
-- **Breaking**: `ReportInvocationResponse` aligned with the actual backend contract. The backend returns `{"success": true}` (and always has). The previous `{"status": "success"|"error", "message"?}` shape was speculative and never returned by the API.
+- **`CARRIER_APP_UNAVAILABLE` is its own error**: it matches `ErrCarrierAppUnavailable` with `errors.Is`, where 3.0.0 matched `ErrInternalServer`.
+
+### Fixed
+
+- Fixed an issue where the Link completion page could report a timeout after a successful verification.
+- Fixed `APIError.Details` missing some of the error's detail fields.
+
+## [3.0.0] - 2026-06-08
+
+First public release, as `github.com/GlideIdentity/glide-be-sdk-go/v3`. `ReportInvocationResponse` has a breaking shape change: code reading `resp.Status` or using the `ReportStatus` / `IsSuccess` / `Success` symbols no longer compiles; read `resp.Success` (bool).
+
+### Added
+
+- **`CheckEligibility`**: carrier and strategy discovery for a phone number or PLMN, without creating a session. `PrepareRequest` gains optional `AuthenticationStrategy` and `SessionTimeout`.
+
+### Changed
+
+- **Breaking**: `ReportInvocationResponse` matches the API's `{"success": true}` response.
   - Removed: `ReportStatus` type, `ReportStatusSuccess`, `ReportStatusError` constants, `IsSuccess()` method, deprecated `Success()` method.
   - New shape: `ReportInvocationResponse{ Success bool json:"success" }`. Callers access `resp.Success` directly.
-  - OpenAPI spec updated to match (`success` required boolean).
-- **Breaking**: `DesktopQRData` collapsed to a single universal QR (DEV-1525). The Mobile Auth companion app now detects the device at runtime and picks TS43 (Android) or Link (iOS), so the server no longer returns per-platform QR images or deep links.
+- **Breaking**: `DesktopQRData` is a single universal QR. The companion app detects the device at runtime and picks TS43 (Android) or Link (iOS), so there are no per-platform QR images or deep links.
   - Removed fields: `AndroidQRImg`, `IOSQRImg`, `AndroidURL`, `IOSURL` (and their `android_qr_image` / `ios_qr_image` / `android_url` / `ios_url` JSON tags).
   - Added fields: `QRImage` (`json:"qr_image"`, base64 PNG data URL of the universal QR) and `URL` (`json:"url"`, the universal mobile-auth URL encoded in the QR). Both are required.
   - Callers should render a single inline QR using `desktopData.Data.QRImage` instead of toggling between platforms.

@@ -1,8 +1,6 @@
 package magicalauth
 
-import (
-	"encoding/json"
-)
+import "encoding/json"
 
 // UseCase represents the authentication use case.
 type UseCase string
@@ -105,6 +103,8 @@ type ClientInfo struct {
 	UserAgent string `json:"user_agent"`
 	// Platform is the platform identifier from the end-user's browser (optional).
 	Platform string `json:"platform,omitempty"`
+	// PrivacyMode is the browsing privacy mode from the end-user's browser (optional).
+	PrivacyMode string `json:"privacy_mode,omitempty"`
 }
 
 // ConsentData contains user consent information.
@@ -116,9 +116,75 @@ type ConsentData struct {
 
 // PrepareOptions contains advanced/optional configuration for prepare requests.
 type PrepareOptions struct {
-	ParentSessionID string   `json:"parent_session_id,omitempty"`
-	Theme           Theme    `json:"theme,omitempty"`
-	LinkType        LinkType `json:"link_type,omitempty"`
+	ParentSessionID    string   `json:"parent_session_id,omitempty"`
+	Theme              Theme    `json:"theme,omitempty"`
+	LinkType           LinkType `json:"link_type,omitempty"`
+	SimSwapMaxAgeHours *int     `json:"sim_swap_max_age_hours,omitempty"`
+
+	// On Desktop (QR), set on the parent prepare; the phone inherits it.
+	// The outcome comes back as BiometricVerification on verify / get-phone.
+	Biometric *bool `json:"biometric,omitempty"`
+
+	// NetworkOrigin carries the server-observed network origin of the requesting
+	// device. Stamp it on BOTH prepares to enable the same-network check
+	// (NetworkCheck): on the desktop/parent prepare it is persisted on the
+	// session, and on the companion/child prepare (carrying ParentSessionID) it
+	// is compared against the parent's stored IP. Derive the IP server-side --
+	// never trust a client-supplied value.
+	NetworkOrigin *NetworkOrigin `json:"network_origin,omitempty"`
+
+	// MobileCompanionPassthrough is opaque JSON forwarded to the branded mobile
+	// companion app and rendered there. Object only, <=16KB.
+	MobileCompanionPassthrough json.RawMessage `json:"mobile_companion_passthrough,omitempty"`
+
+	// CompletionRedirectURL is where to send the browser once authentication
+	// completes. It selects one of the completion_redirect_urls registered on
+	// your application; matching is exact per RFC 6749 3.1.2 and an unregistered
+	// value is rejected.
+	//
+	// Stamp it server-side from your own deployment's configured origin -- never
+	// from the request Host header or any other client-controllable input. If
+	// your application registers more than one completion URL, always send it:
+	// when omitted the aggregator falls back to the first registered URL, so the
+	// browser can land on another deployment's completion page.
+	CompletionRedirectURL string `json:"completion_redirect_url,omitempty"`
+}
+
+// NetworkOrigin is the server-observed network origin of a prepare request.
+//
+// The IP MUST be derived by your backend from the connection it actually sees
+// (e.g. the left-most untrusted hop of a trusted X-Forwarded-For chain) -- never
+// from a value the end-user's client supplies in the request body or a header it
+// controls. The aggregator trusts this value as-is and uses it only to compute
+// the same-network NetworkCheck.
+type NetworkOrigin struct {
+	// IP is the server-observed IP address (IPv4 or IPv6) of the requesting device.
+	IP string `json:"ip,omitempty"`
+}
+
+// NetworkCheck is the egress-closeness comparison between the desktop (parent)
+// and companion (child) server-observed IPs. Returned on the companion/child
+// prepare response and on the parent's verify-phone-number and get-phone-number,
+// only when the desktop prepare stamped NetworkOrigin.
+//
+// It is a SIGNAL for how close the two devices' public egress IPs are as seen by
+// the server -- NOT proof of the same physical LAN (an identical egress IP can
+// front an entire NAT/CGNAT or a whole city) -- and must never be used as a hard
+// gate. The caller owns any threshold on PrefixBits.
+type NetworkCheck struct {
+	// Match is "same_ip", "same_subnet", "different" or "unknown". Branch on it;
+	// on "unknown" Family and PrefixBits are absent.
+	Match string `json:"match"`
+	// Family is the IP family the comparison was performed in: "ipv4" or "ipv6".
+	Family string `json:"family,omitempty"`
+	// PrefixBits is the number of matching leading bits between the two egress IPs
+	// (0..32 for ipv4, 0..128 for ipv6). Higher = closer egress; the maximum
+	// (32 / 128) means an identical egress IP. A pointer because 0 is a real
+	// reading (nothing in common), distinct from nil on "unknown".
+	PrefixBits *int `json:"prefix_bits,omitempty"`
+	// DesktopIP and CompanionIP are the egress addresses compared, for your own risk engine.
+	DesktopIP   string `json:"desktop_ip,omitempty"`
+	CompanionIP string `json:"companion_ip,omitempty"`
 }
 
 // SessionInfo contains session information from the API.
@@ -208,6 +274,8 @@ type SimSwapInfo struct {
 	AgeBand     string               `json:"age_band,omitempty"`
 	CarrierName string               `json:"carrier_name,omitempty"`
 	CheckedAt   string               `json:"checked_at,omitempty"`
+	Swapped     *bool                `json:"swapped,omitempty"`
+	MaxAgeHours int                  `json:"max_age_hours,omitempty"`
 	Reason      SimSwapFailureReason `json:"reason,omitempty"`
 }
 
@@ -219,6 +287,10 @@ type DeviceInfo struct {
 }
 
 // EligibilityRequest represents a request to check authentication eligibility.
+// ClientInfo is REQUIRED (with a non-blank UserAgent) and enforced by
+// validateEligibilityRequest before the request is sent — the pointer type lets
+// the SDK distinguish "omitted" from an empty struct and return a clear
+// ValidationError rather than an avoidable server 400.
 type EligibilityRequest struct {
 	PhoneNumber string      `json:"phone_number,omitempty"`
 	PLMN        *PLMN       `json:"plmn,omitempty"`
@@ -271,6 +343,15 @@ type AvailableOption struct {
 type EligibilityResponse struct {
 	Eligible         bool              `json:"eligible"`
 	AvailableOptions []AvailableOption `json:"available_options"`
+	// CarrierName is the normalized carrier name for the resolved network.
+	// Present only for callers the gateway has explicitly enabled to receive
+	// carrier information (same per-app gate as /prepare); omitted otherwise and
+	// whenever Eligible is false.
+	CarrierName string `json:"carrier_name,omitempty"`
+	// RequestID is the id of this request, the same value as the X-Request-ID
+	// response header. Quote it to Glide support. Empty from servers older than
+	// the release that added it.
+	RequestID string `json:"request_id,omitempty"`
 }
 
 // PrepareRequest is the request for preparing authentication.
@@ -311,6 +392,29 @@ type PrepareResponse struct {
 	// (older server) from "TTL is 0" -- matches the Node SDK
 	// (`number | undefined`) and the Java SDK (`Integer`).
 	SessionExpiresInSeconds *int `json:"session_expires_in_seconds,omitempty"`
+
+	// NetworkCheck is the egress-proximity comparison between the desktop
+	// (parent) and companion (child) devices. Present only on the companion/child
+	// prepare response (the request carrying Options.ParentSessionID), and only
+	// when the desktop/parent prepare opted in by stamping Options.NetworkOrigin.
+	// Nil for flows that do not opt in.
+	NetworkCheck *NetworkCheck `json:"network_check,omitempty"`
+	// MobileCompanionPassthrough echoes the opaque passthrough JSON stored on
+	// the parent session, returned on the child (companion) prepare. Nil for
+	// non-companion flows.
+	MobileCompanionPassthrough json.RawMessage `json:"mobile_companion_passthrough,omitempty"`
+
+	// CarrierName is the normalized carrier name for the resolved network.
+	// Present only for callers the gateway has explicitly enabled to receive
+	// carrier information (the same per-app gate as /eligibility). When gated
+	// off, the field is omitted on the wire (omitempty), so it unmarshals to the
+	// empty string here — preserving the privacy-by-default contract.
+	CarrierName string `json:"carrier_name,omitempty"`
+
+	// RequestID is the id of this request, the same value as the X-Request-ID
+	// response header. Quote it to Glide support. Empty from servers older than
+	// the release that added it. The session this creates is Session.SessionKey.
+	RequestID string `json:"request_id,omitempty"`
 }
 
 // VerifyPhoneNumberRequest is the request for verifying a phone number.
@@ -323,14 +427,47 @@ type VerifyPhoneNumberRequest struct {
 	Signature string `json:"signature,omitempty"`
 }
 
+// BiometricVerification is the device biometric outcome, shared by the verify
+// and get-phone responses and the verification record's biometric_verification
+// claim. A value outside the constants below is kept as sent.
+type BiometricVerification string
+
+const (
+	BiometricVerificationVerified     BiometricVerification = "VERIFIED"
+	BiometricVerificationFailed       BiometricVerification = "FAILED"
+	BiometricVerificationNotEnrolled  BiometricVerification = "NOT_ENROLLED"
+	BiometricVerificationUnsupported  BiometricVerification = "UNSUPPORTED"
+	BiometricVerificationNotRequested BiometricVerification = "NOT_REQUESTED"
+)
+
 // VerifyPhoneNumberResponse is the response from phone number verification.
 type VerifyPhoneNumberResponse struct {
-	PhoneNumber        string              `json:"phone_number"`
-	Verified           bool                `json:"verified"`
-	Aud                string              `json:"aud,omitempty"`
-	SimSwap            *SimSwapInfo        `json:"sim_swap,omitempty"`
-	DeviceSwap         *DeviceSwapInfo     `json:"device_swap,omitempty"`
-	PhoneNumberDetails *PhoneNumberDetails `json:"phone_number_details,omitempty"`
+	PhoneNumber string `json:"phone_number"`
+	Verified    bool   `json:"verified"`
+	// Nonce is the session's prepare nonce, equal to the record's nonce claim.
+	// Empty from servers older than the release that added it.
+	Nonce string `json:"nonce,omitempty"`
+	Aud   string `json:"aud,omitempty"`
+	// BiometricVerification equals the record's biometric_verification claim.
+	BiometricVerification BiometricVerification `json:"biometric_verification"`
+	SimSwap               *SimSwapInfo          `json:"sim_swap,omitempty"`
+	DeviceSwap            *DeviceSwapInfo       `json:"device_swap,omitempty"`
+	NetworkCheck          *NetworkCheck         `json:"network_check,omitempty"`
+	PhoneNumberDetails    *PhoneNumberDetails   `json:"phone_number_details,omitempty"`
+	// VerificationRecord is the Glide-signed compact JWS of this result. Check it
+	// with Client.VerifyVerificationRecord before trusting it.
+	VerificationRecord string `json:"verification_record,omitempty"`
+	// VerificationRecordStatus is VerificationRecordStatusSigned or
+	// VerificationRecordStatusUnavailable; empty from servers without records.
+	VerificationRecordStatus string `json:"verification_record_status,omitempty"`
+	// SessionKey is the session this response is about (the key prepare
+	// returned), so a result can be stored or logged without the request.
+	// Empty from servers older than the release that added it.
+	SessionKey string `json:"session_key,omitempty"`
+	// RequestID is the id of this request, the same value as the X-Request-ID
+	// response header. Quote it to Glide support. Empty from servers older than
+	// the release that added it.
+	RequestID string `json:"request_id,omitempty"`
 }
 
 // GetPhoneNumberRequest is the request for retrieving a phone number.
@@ -345,11 +482,24 @@ type GetPhoneNumberRequest struct {
 
 // GetPhoneNumberResponse is the response from phone number retrieval.
 type GetPhoneNumberResponse struct {
-	PhoneNumber        string              `json:"phone_number"`
-	Aud                string              `json:"aud,omitempty"`
-	SimSwap            *SimSwapInfo        `json:"sim_swap,omitempty"`
-	DeviceSwap         *DeviceSwapInfo     `json:"device_swap,omitempty"`
-	PhoneNumberDetails *PhoneNumberDetails `json:"phone_number_details,omitempty"`
+	PhoneNumber string `json:"phone_number"`
+	// Nonce is the session's prepare nonce. Empty from servers older than the
+	// release that added it.
+	Nonce                 string                `json:"nonce,omitempty"`
+	Aud                   string                `json:"aud,omitempty"`
+	BiometricVerification BiometricVerification `json:"biometric_verification"`
+	SimSwap               *SimSwapInfo          `json:"sim_swap,omitempty"`
+	DeviceSwap            *DeviceSwapInfo       `json:"device_swap,omitempty"`
+	NetworkCheck          *NetworkCheck         `json:"network_check,omitempty"`
+	PhoneNumberDetails    *PhoneNumberDetails   `json:"phone_number_details,omitempty"`
+	// SessionKey is the session this response is about (the key prepare
+	// returned), so a result can be stored or logged without the request.
+	// Empty from servers older than the release that added it.
+	SessionKey string `json:"session_key,omitempty"`
+	// RequestID is the id of this request, the same value as the X-Request-ID
+	// response header. Quote it to Glide support. Empty from servers older than
+	// the release that added it.
+	RequestID string `json:"request_id,omitempty"`
 }
 
 // ReportInvocationRequest is the request for reporting an invocation event.
@@ -364,6 +514,14 @@ type ReportInvocationRequest struct {
 // `{"success": true}`.
 type ReportInvocationResponse struct {
 	Success bool `json:"success"`
+	// SessionKey is the session this response is about (the key prepare
+	// returned), so a result can be stored or logged without the request.
+	// Empty from servers older than the release that added it.
+	SessionKey string `json:"session_key,omitempty"`
+	// RequestID is the id of this request, the same value as the X-Request-ID
+	// response header. Quote it to Glide support. Empty from servers older than
+	// the release that added it.
+	RequestID string `json:"request_id,omitempty"`
 }
 
 // StatusResponse is the response from checking session status.
@@ -379,6 +537,10 @@ type StatusResponse struct {
 	GraceExpiresAt string                 `json:"grace_expires_at,omitempty"`
 	ScannedAt      string                 `json:"scanned_at,omitempty"`
 	Extra          map[string]interface{} `json:"extra,omitempty"` // Additional metadata (e.g., error reason)
+	// RequestID is the id of this request, the same value as the X-Request-ID
+	// response header. Quote it to Glide support. Empty from servers older than
+	// the release that added it.
+	RequestID string `json:"request_id,omitempty"`
 }
 
 // DeviceSwapInfo contains device swap (IMEI change) check results.
@@ -389,6 +551,8 @@ type DeviceSwapInfo struct {
 	AgeBand     string    `json:"age_band,omitempty"`
 	CarrierName string    `json:"carrier_name,omitempty"`
 	CheckedAt   string    `json:"checked_at,omitempty"`
+	Swapped     *bool     `json:"swapped,omitempty"`
+	MaxAgeHours int       `json:"max_age_hours,omitempty"`
 }
 
 // PhoneNumberDetails contains parsed components of an E.164 phone number.
@@ -420,6 +584,14 @@ type CompleteRequest struct {
 // CompleteResponse is the response from completing device-bound authentication.
 type CompleteResponse struct {
 	Status string `json:"status"`
+	// SessionKey is the session this response is about (the key prepare
+	// returned), so a result can be stored or logged without the request.
+	// Empty from servers older than the release that added it.
+	SessionKey string `json:"session_key,omitempty"`
+	// RequestID is the id of this request, the same value as the X-Request-ID
+	// response header. Quote it to Glide support. Empty from servers older than
+	// the release that added it.
+	RequestID string `json:"request_id,omitempty"`
 }
 
 // DesktopWaitResponse is returned with HTTP 202 when a desktop QR session's
@@ -431,6 +603,10 @@ type DesktopWaitResponse struct {
 	SessionStatus           string `json:"session_status"`
 	Retry                   bool   `json:"retry"`
 	SessionExpiresInSeconds int    `json:"session_expires_in_seconds"`
+	// RequestID is the id of this request, the same value as the X-Request-ID
+	// response header. Quote it to Glide support. Empty from servers older than
+	// the release that added it.
+	RequestID string `json:"request_id,omitempty"`
 }
 
 // BindingCookieOptions configures the device binding cookie.
@@ -449,19 +625,16 @@ type tokenResponse struct {
 
 // errorResponse is the internal error response from the API.
 type errorResponse struct {
-	Code      string              `json:"code"`
-	Message   string              `json:"message"`
-	Status    int                 `json:"status,omitempty"`
-	RequestID string              `json:"request_id,omitempty"`
-	Timestamp string              `json:"timestamp,omitempty"`
-	TraceID   string              `json:"trace_id,omitempty"`
-	SpanID    string              `json:"span_id,omitempty"`
-	Service   string              `json:"service,omitempty"`
-	Details   *errorResponseDeets `json:"details,omitempty"`
-}
-
-type errorResponseDeets struct {
-	Fields map[string]string `json:"fields,omitempty"`
+	Code       string         `json:"code"`
+	Message    string         `json:"message"`
+	Status     int            `json:"status,omitempty"`
+	RequestID  string         `json:"request_id,omitempty"`
+	SessionKey string         `json:"session_key,omitempty"`
+	Timestamp  string         `json:"timestamp,omitempty"`
+	TraceID    string         `json:"trace_id,omitempty"`
+	SpanID     string         `json:"span_id,omitempty"`
+	Service    string         `json:"service,omitempty"`
+	Details    map[string]any `json:"details,omitempty"`
 }
 
 // oauthError is the OAuth2 error response.

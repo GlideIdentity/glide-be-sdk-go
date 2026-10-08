@@ -13,30 +13,35 @@ var (
 	ErrMissingClientSecret = errors.New("magicauth: client_secret is required")
 
 	// Validation errors
-	ErrValidation        = errors.New("magicauth: validation error")
-	ErrNilRequest        = fmt.Errorf("%w: request is nil", ErrValidation)
-	ErrMissingNonce      = errors.New("magicauth: nonce is required")
-	ErrMissingUseCase    = errors.New("magicauth: use_case is required")
-	ErrMissingSessionKey = errors.New("magicauth: session_key is required")
-	ErrMissingCredential = errors.New("magicauth: credential is required")
-	ErrMissingSessionID  = errors.New("magicauth: session_id is required")
-	ErrMissingPhoneNum   = errors.New("magicauth: phone_number is required for VerifyPhoneNumber use case")
+	ErrValidation          = errors.New("magicauth: validation error")
+	ErrNilRequest          = fmt.Errorf("%w: request is nil", ErrValidation)
+	ErrMissingNonce        = errors.New("magicauth: nonce is required")
+	ErrMissingUseCase      = errors.New("magicauth: use_case is required")
+	ErrMissingSessionKey   = errors.New("magicauth: session_key is required")
+	ErrMissingCredential   = errors.New("magicauth: credential is required")
+	ErrMissingSessionID    = errors.New("magicauth: session_id is required")
+	ErrMissingPhoneNum     = errors.New("magicauth: phone_number is required for VerifyPhoneNumber use case")
+	ErrNoPhoneNumbers      = errors.New("magicauth: phone_numbers must contain at least one number")
+	ErrTooManyPhoneNumbers = errors.New("magicauth: phone_numbers exceeds the maximum of 10")
+	ErrBlankPhoneNumber    = errors.New("magicauth: phone_numbers must not contain blank entries")
 
 	// API errors (match API error codes)
-	ErrBadRequest          = errors.New("magicauth: bad request")
-	ErrUnauthorized        = errors.New("magicauth: unauthorized")
-	ErrForbidden           = errors.New("magicauth: forbidden")
-	ErrSessionNotFound     = errors.New("magicauth: session not found")
-	ErrCarrierNotEligible  = errors.New("magicauth: carrier not eligible")
-	ErrUnsupportedPlatform = errors.New("magicauth: unsupported platform")
-	ErrPhoneNumberMismatch = errors.New("magicauth: phone number mismatch")
-	ErrInvalidCredential   = errors.New("magicauth: invalid credential format")
-	ErrBrowserMismatch     = errors.New("magicauth: browser mismatch")
-	ErrSessionNotEligible  = errors.New("magicauth: session not eligible")
-	ErrSessionExpired      = errors.New("magicauth: session expired")
-	ErrRateLimit           = errors.New("magicauth: rate limit exceeded")
-	ErrInternalServer      = errors.New("magicauth: internal server error")
-	ErrServiceUnavailable  = errors.New("magicauth: service unavailable")
+	ErrBadRequest            = errors.New("magicauth: bad request")
+	ErrUnauthorized          = errors.New("magicauth: unauthorized")
+	ErrForbidden             = errors.New("magicauth: forbidden")
+	ErrSessionNotFound       = errors.New("magicauth: session not found")
+	ErrCarrierNotEligible    = errors.New("magicauth: carrier not eligible")
+	ErrCarrierRejected       = errors.New("magicauth: carrier rejected the authentication request")
+	ErrCarrierAppUnavailable = errors.New("magicauth: carrier app unavailable on the phone that scanned the QR code")
+	ErrUnsupportedPlatform   = errors.New("magicauth: unsupported platform")
+	ErrPhoneNumberMismatch   = errors.New("magicauth: phone number mismatch")
+	ErrInvalidCredential     = errors.New("magicauth: invalid credential format")
+	ErrBrowserMismatch       = errors.New("magicauth: browser mismatch")
+	ErrSessionNotEligible    = errors.New("magicauth: session not eligible")
+	ErrSessionExpired        = errors.New("magicauth: session expired")
+	ErrRateLimit             = errors.New("magicauth: rate limit exceeded")
+	ErrInternalServer        = errors.New("magicauth: internal server error")
+	ErrServiceUnavailable    = errors.New("magicauth: service unavailable")
 
 	// Device binding errors (SDK-side validation)
 	ErrDeviceBindingFailed  = errors.New("magicauth: device binding validation failed")
@@ -55,6 +60,8 @@ const (
 	CodeSessionNotFound          ErrorCode = "SESSION_NOT_FOUND"
 	CodeInvalidVerification      ErrorCode = "INVALID_VERIFICATION"
 	CodeCarrierNotEligible       ErrorCode = "CARRIER_NOT_ELIGIBLE"
+	CodeCarrierRejected          ErrorCode = "CARRIER_REJECTED"
+	CodeCarrierAppUnavailable    ErrorCode = "CARRIER_APP_UNAVAILABLE"
 	CodeUnsupportedPlatform      ErrorCode = "UNSUPPORTED_PLATFORM"
 	CodePhoneNumberMismatch      ErrorCode = "PHONE_NUMBER_MISMATCH"
 	CodeInvalidCredential        ErrorCode = "INVALID_CREDENTIAL_FORMAT" // #nosec G101 -- error code, not a credential
@@ -87,8 +94,15 @@ type APIError struct {
 	// Status is the HTTP status code
 	Status int
 
-	// RequestID is the request tracking ID
+	// RequestID is the id of this request, the same value as the X-Request-ID
+	// response header. Quote it to Glide support.
 	RequestID string
+
+	// SessionKey is the session the failed request was about, once the server
+	// had read it from the request. Empty when the request failed before naming
+	// a session, on operations that have none (eligibility, prepare), and from
+	// servers older than the release that added it.
+	SessionKey string
 
 	// TraceID is the distributed trace ID
 	TraceID string
@@ -102,7 +116,13 @@ type APIError struct {
 	// Service is the name of the service that produced this error
 	Service string
 
-	// Details contains additional error details
+	// Details contains additional error details flattened to string values.
+	//
+	// Both the nested "fields" map (validation errors) and any top-level
+	// detail keys are preserved. For CARRIER_REJECTED this carries
+	// "carrier_error", "carrier_error_description", and (when present)
+	// "stage" and "error_code", so callers can inspect why a device-bound
+	// (link/desktop) authentication was rejected by the carrier.
 	Details map[string]string
 
 	// RetryAfter is the number of seconds to wait before retrying (for rate limits)
@@ -132,6 +152,8 @@ var errorCodeMap = map[ErrorCode]error{
 	CodeSessionNotFound:          ErrSessionNotFound,
 	CodeInvalidVerification:      ErrBadRequest,
 	CodeCarrierNotEligible:       ErrCarrierNotEligible,
+	CodeCarrierRejected:          ErrCarrierRejected,
+	CodeCarrierAppUnavailable:    ErrCarrierAppUnavailable,
 	CodeUnsupportedPlatform:      ErrUnsupportedPlatform,
 	CodePhoneNumberMismatch:      ErrPhoneNumberMismatch,
 	CodeInvalidCredential:        ErrInvalidCredential,
@@ -168,13 +190,50 @@ func (e *DesktopWaitError) Error() string {
 		e.Response.Message, e.Response.Retry, e.Response.SessionExpiresInSeconds)
 }
 
+// ErrVerificationRecord matches every *VerificationRecordError via errors.Is.
+var ErrVerificationRecord = errors.New("verification record invalid")
+
+// Values of VerificationRecordError.Code (identical strings in every Glide backend SDK).
+const (
+	VerificationRecordCodeMalformed          = "MALFORMED"
+	VerificationRecordCodeDisallowedHeader   = "DISALLOWED_HEADER"
+	VerificationRecordCodeUnknownKey         = "UNKNOWN_KEY"
+	VerificationRecordCodeBadSignature       = "BAD_SIGNATURE"
+	VerificationRecordCodeWrongIssuer        = "WRONG_ISSUER"
+	VerificationRecordCodeWrongAudience      = "WRONG_AUDIENCE"
+	VerificationRecordCodeExpired            = "EXPIRED"
+	VerificationRecordCodeNotYetValid        = "NOT_YET_VALID"
+	VerificationRecordCodeNonceMismatch      = "NONCE_MISMATCH"
+	VerificationRecordCodeOriginMismatch     = "ORIGIN_MISMATCH"
+	VerificationRecordCodeUnsupportedVersion = "UNSUPPORTED_VERSION"
+	VerificationRecordCodeRevokedKey         = "REVOKED_KEY"
+	VerificationRecordCodeRecordUnavailable  = "RECORD_UNAVAILABLE"
+)
+
+// VerificationRecordError is returned when a verification record fails
+// verification. Code is one of the VerificationRecordCode constants.
+type VerificationRecordError struct {
+	Code    string
+	Message string
+}
+
+func (e *VerificationRecordError) Error() string {
+	return fmt.Sprintf("verification record: %s: %s", e.Code, e.Message)
+}
+
+// Is reports whether target is ErrVerificationRecord.
+func (e *VerificationRecordError) Is(target error) bool {
+	return target == ErrVerificationRecord
+}
+
+func recordError(code, message string) *VerificationRecordError {
+	return &VerificationRecordError{Code: code, Message: message}
+}
+
 // newAPIError creates an APIError from an error response.
 func newAPIError(resp *errorResponse, status int, retryAfter int) *APIError {
 	code := ErrorCode(resp.Code)
-	var details map[string]string
-	if resp.Details != nil {
-		details = resp.Details.Fields
-	}
+	details := flattenErrorDetails(resp.Details)
 
 	return &APIError{
 		Err:        codeToSentinel(code),
@@ -182,6 +241,7 @@ func newAPIError(resp *errorResponse, status int, retryAfter int) *APIError {
 		Message:    resp.Message,
 		Status:     status,
 		RequestID:  resp.RequestID,
+		SessionKey: resp.SessionKey,
 		TraceID:    resp.TraceID,
 		SpanID:     resp.SpanID,
 		Timestamp:  resp.Timestamp,
@@ -189,6 +249,42 @@ func newAPIError(resp *errorResponse, status int, retryAfter int) *APIError {
 		Details:    details,
 		RetryAfter: retryAfter,
 	}
+}
+
+// flattenErrorDetails converts the raw API "details" object into a flat
+// map[string]string. The nested "fields" map (validation errors) is merged in
+// alongside any top-level scalar detail keys, so callers never silently lose
+// detail keys the server sent. This is what preserves the CARRIER_REJECTED
+// carrier_error/carrier_error_description/stage/error_code keys that the
+// previous fields-only parsing dropped. Composite top-level values (arrays and
+// non-"fields" objects) are skipped because they have no string representation.
+func flattenErrorDetails(raw map[string]any) map[string]string {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(raw))
+	for key, value := range raw {
+		switch val := value.(type) {
+		case string:
+			out[key] = val
+		case bool, float64:
+			out[key] = fmt.Sprintf("%v", val)
+		case map[string]any:
+			if key == "fields" {
+				for fieldKey, fieldValue := range val {
+					if s, ok := fieldValue.(string); ok {
+						out[fieldKey] = s
+					} else if fieldValue != nil {
+						out[fieldKey] = fmt.Sprintf("%v", fieldValue)
+					}
+				}
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // newOAuthError creates an APIError from an OAuth error response.

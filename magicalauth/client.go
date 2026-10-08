@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // API paths
@@ -24,9 +25,11 @@ const (
 // Client is the Magic Auth API client.
 type Client struct {
 	baseURL      string
+	clientID     string
 	httpClient   HTTPClient
 	logger       Logger
 	tokenManager *TokenManager
+	records      *recordKeyCache
 }
 
 // NewClient creates a new Magic Auth client with the given configuration.
@@ -39,9 +42,11 @@ func NewClient(cfg Config) (*Client, error) {
 
 	return &Client{
 		baseURL:      cfg.BaseURL,
+		clientID:     cfg.ClientID,
 		httpClient:   cfg.HTTPClient,
 		logger:       cfg.Logger,
 		tokenManager: newTokenManager(&cfg),
+		records:      newRecordKeyCache(strings.TrimRight(cfg.BaseURL, "/"), cfg.HTTPClient),
 	}, nil
 }
 

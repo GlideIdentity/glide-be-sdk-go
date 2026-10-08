@@ -197,6 +197,15 @@ func ClearStaleBindingCookies(cookieHeader string, opts *BindingCookieOptions) [
 // GetCompletionPageHTML returns the full HTML for the device binding completion
 // redirect page. completeEndpoint must be a relative path starting with "/"
 // (e.g., "/api/glide/complete"). Cross-origin endpoints are not supported.
+//
+// On successful completion the page writes a localStorage signal
+// (glide_signal_{session_key} = session_key) that the FE SDK in the original
+// tab detects via StorageEvent, plus a sibling timestamp
+// (glide_sigmeta_{session_key} = epoch ms) the FE SDK uses to sweep stale
+// signals. Both keys stay for the session lifetime: the waiting tab may be
+// suspended while the App Clip is in the foreground and must still find the
+// signal when it resumes. The FE SDK removes them on consume; the page only
+// erases them after 10 minutes as a fallback.
 func GetCompletionPageHTML(completeEndpoint string) (string, error) {
 	if !strings.HasPrefix(completeEndpoint, "/") || strings.HasPrefix(completeEndpoint, "//") {
 		return "", fmt.Errorf(
@@ -340,12 +349,18 @@ func buildCompletionHTML(completeEndpoint string) string {
 
     if (res.ok) {
       var signalKey = 'glide_signal_' + sessionKey;
+      var sigmetaKey = 'glide_sigmeta_' + sessionKey;
+      var signalStored = false;
       try {
         localStorage.setItem(signalKey, sessionKey);
-        setTimeout(function() {
-          try { localStorage.removeItem(signalKey); } catch(e) {}
-        }, 5000);
+        signalStored = true;
+        localStorage.setItem(sigmetaKey, String(Date.now()));
       } catch(e) {}
+      if (signalStored) {
+        setTimeout(function() {
+          try { localStorage.removeItem(signalKey); localStorage.removeItem(sigmetaKey); } catch(e) {}
+        }, 600000);
+      }
       tryClose();
     } else {
       var code = '';
