@@ -109,15 +109,7 @@ func (c *Client) parseErrorResponse(body []byte, status int, headers http.Header
 		return c.genericError(status, string(body))
 	}
 
-	// Extract Retry-After header for rate limiting
-	retryAfter := 0
-	if ra := headers.Get("Retry-After"); ra != "" {
-		if seconds, err := strconv.Atoi(ra); err == nil {
-			retryAfter = seconds
-		}
-	}
-
-	return newAPIError(&errResp, status, retryAfter)
+	return newAPIError(&errResp, status, retryAfterSecondsFromHeader(headers))
 }
 
 // genericError creates a generic error based on HTTP status code.
@@ -171,4 +163,16 @@ func (c *Client) genericError(status int, body string) *APIError {
 		Message: message,
 		Status:  status,
 	}
+}
+
+func retryAfterSecondsFromHeader(headers http.Header) int {
+	ra := headers.Get("Retry-After")
+	if ra == "" {
+		return 0
+	}
+	v, err := strconv.Atoi(ra)
+	if err != nil || v < 0 {
+		return 0
+	}
+	return v
 }

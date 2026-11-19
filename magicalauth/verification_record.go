@@ -56,6 +56,13 @@ type VerificationRecordAgeBand struct {
 	To   int `json:"to"`
 }
 
+// VerificationRecordLiveCall is the live_call claim on a verified record.
+type VerificationRecordLiveCall struct {
+	Status      string `json:"status"`
+	CarrierName string `json:"carrier_name,omitempty"`
+	Reason      string `json:"reason,omitempty"`
+}
+
 // VerificationRecordSwap is the sim_swap or device_swap claim on a verified record.
 type VerificationRecordSwap struct {
 	Checked     bool                       `json:"checked"`
@@ -87,7 +94,11 @@ type VerificationRecordClaims struct {
 	BiometricVerification BiometricVerification       `json:"biometric_verification"`
 	SimSwap               *VerificationRecordSwap     `json:"sim_swap,omitempty"`
 	DeviceSwap            *VerificationRecordSwap     `json:"device_swap,omitempty"`
+	LiveCall              *VerificationRecordLiveCall `json:"live_call,omitempty"`
 	SignOffs              []VerificationRecordSignOff `json:"sign_offs"`
+	// Factors is ["carrier"] when the record omits the claim.
+	Factors    []string `json:"factors"`
+	ActionHash string   `json:"action_hash,omitempty"`
 }
 
 // SignOffResult reports how the SDK treated one sign-off. Result is

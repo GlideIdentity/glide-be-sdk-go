@@ -29,7 +29,7 @@ const (
 	DefaultTimeout = 30 * time.Second
 
 	// Version is the SDK version.
-	Version = "3.2.0"
+	Version = "3.2.1"
 )
 
 // HTTPClient is the interface for making HTTP requests.

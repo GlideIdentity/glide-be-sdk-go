@@ -100,7 +100,7 @@ func (tm *TokenManager) fetchToken(ctx context.Context) (string, error) {
 	}
 
 	if resp.StatusCode >= 400 {
-		return "", tm.parseTokenError(respBody, resp.StatusCode)
+		return "", tm.parseTokenError(respBody, resp.StatusCode, retryAfterSecondsFromHeader(resp.Header))
 	}
 
 	var tokenResp tokenResponse
@@ -122,10 +122,12 @@ func (tm *TokenManager) fetchToken(ctx context.Context) (string, error) {
 }
 
 // parseTokenError parses an OAuth2 error response.
-func (tm *TokenManager) parseTokenError(body []byte, status int) error {
+func (tm *TokenManager) parseTokenError(body []byte, status int, retryAfter int) error {
 	var oauthErr oauthError
 	if err := json.Unmarshal(body, &oauthErr); err != nil {
-		// If we can't parse, return generic error
+		if status >= 500 || status == 429 {
+			return newOAuthError(&oauthError{}, status, retryAfter)
+		}
 		return &APIError{
 			Err:     ErrUnauthorized,
 			Code:    CodeUnauthorized,
@@ -133,7 +135,7 @@ func (tm *TokenManager) parseTokenError(body []byte, status int) error {
 			Status:  status,
 		}
 	}
-	return newOAuthError(&oauthErr, status)
+	return newOAuthError(&oauthErr, status, retryAfter)
 }
 
 // ClearToken clears the cached token (useful for testing or forced refresh).

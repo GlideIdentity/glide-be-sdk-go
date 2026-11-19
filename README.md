@@ -115,9 +115,9 @@ Everything optional about a session is set through `Options`:
 | `SimSwapMaxAgeHours` | `*int` | SIM swap query window in hours. See below. |
 | `Biometric` | `*bool` | Opt in to the TS43 biometric signal. See below. |
 
-**`SimSwapMaxAgeHours`** sets how far back a SIM/device swap check looks. Integer, **1–2400**; anything outside that range is refused with `400 VALIDATION_ERROR` before a session is created. When omitted, the server falls back to the carrier's configured `default_max_age_hours` and then to a **24 hour** default. The window that actually produced the answer comes back as `MaxAgeHours` on the swap payloads, so you can always tell which window you are reading.
+**`SimSwapMaxAgeHours`** sets how far back a SIM/device swap check looks. Integer, **1–2400**; anything outside that range is refused with `400 VALIDATION_ERROR` before a session is created. When omitted, the server falls back to the carrier's configured `default_max_age_hours` and then to a **24-hour** default. The window that actually produced the answer comes back as `MaxAgeHours` on the swap payloads, so you can always tell which window you are reading. A window of 720 or more lets an undated no-swap answer grade `RiskLevelLow`; dated answers keep their band grading (see *Reading the swap window* below).
 
-**`Biometric`** asks the device to run a biometric step during the TS43 credential ceremony and report the outcome as `BiometricVerification`. It is a `*bool` so the option stays tri-state: `nil` is omitted from the request, while an explicit `false` still serialises as JSON `false`. On Desktop (QR), set on the parent prepare; the phone inherits it. Ignored on Link. Requesting it never makes biometric mandatory: a device that cannot perform it still authenticates.
+**`Biometric`** asks the device to run a biometric step during the TS43 credential ceremony and report the outcome as `BiometricVerification`. It is a `*bool` so the option stays tri-state: `nil` is omitted from the request, while an explicit `false` still serialises as JSON `false`. On Desktop (QR), set on the parent prepare; the phone inherits it. Ignored on Link. Requesting it never makes biometric mandatory: a device that cannot perform it still authenticates. Biometric is unavailable on Android Chrome below 156: there Glide never asks the phone for it (older Chrome shows a trust prompt instead), and eligibility and prepare return `biometric: "unavailable"`. Verify returns `UNSUPPORTED` when biometric was requested at prepare, or `NOT_REQUESTED` when it was requested only at invoke. Login is not blocked.
 
 ```go
 window := 72
@@ -217,12 +217,58 @@ if err == nil && rec.Claims.Verified {
 - An empty record fails closed with `VerificationRecordCodeRecordUnavailable` (`RECORD_UNAVAILABLE`), so the response field can be passed straight in.
 - Records longer than 16 KiB are rejected as `MALFORMED` before decoding.
 - The other codes are `MALFORMED`, `DISALLOWED_HEADER`, `UNKNOWN_KEY`, `BAD_SIGNATURE`, `WRONG_ISSUER`, `WRONG_AUDIENCE` (`aud` must equal the expected audience, default your client ID), `EXPIRED`, `NOT_YET_VALID`, `NONCE_MISMATCH`, `ORIGIN_MISMATCH`, `UNSUPPORTED_VERSION` and `REVOKED_KEY`. Every failure is a `*VerificationRecordError` and matches `ErrVerificationRecord` with `errors.Is`.
-- Claims that break the v1 contract fail with `MALFORMED`: `ver` must be the string `"1.0"` (otherwise `UNSUPPORTED_VERSION`), `verified` a boolean, `jti`, `nonce` and `sub` (`tel:+E164`) non-empty strings, `nbf` equal to `iat`, `use_case` exactly `VerifyPhoneNumber`, `origin` (canonical device origin, `UNKNOWN` on Link) and `biometric_verification` strings, `exp` 1 to 60 s after `iat`, and `sign_offs` an array of entries with non-empty `role`, `signer` and `status` (`unavailable` with a `reason`, or `present` with `format` and `token`), exactly one of them a `carrier` entry signed `carrier:<id>`. Optional `strategy` (`TS_43`, `LINK`, `DESKTOP__TS_43`, `DESKTOP__LINK`, `DESKTOP`), `phone_number_details`, `carrier` (`{id, name, mvno}`), `sim_swap` and `device_swap` are accepted when present; a wrong JSON type, a `carrier` without a non-empty string `id`, or a `carrier.id` that does not match the carrier sign-off signer (`carrier:<id>`), is `MALFORMED`. Record `sim_swap` / `device_swap` carry `age_band` `{from, to}` in hours (`-1` unknown) and omit `checked_at` — `iat` is the authoritative check time.
+- Claims that break the v1 contract fail with `MALFORMED`: `ver` must be the string `"1.0"` (otherwise `UNSUPPORTED_VERSION`), `verified` a boolean, `jti`, `nonce` and `sub` (`tel:+E164`) non-empty strings, `nbf` equal to `iat`, `use_case` exactly `VerifyPhoneNumber`, `origin` (canonical device origin, `UNKNOWN` on Link) and `biometric_verification` strings, `exp` 1 to 60 s after `iat`, and `sign_offs` an array of entries with non-empty `role`, `signer` and `status` (`unavailable` with a `reason`, or `present` with `format` and `token`), exactly one of them a `carrier` entry signed `carrier:<id>`. Optional `strategy` (`TS_43`, `LINK`, `DESKTOP__TS_43`, `DESKTOP__LINK`, `DESKTOP`, `PASSKEY`, `CALL__TS_43`, `CALL__LINK`, `CALL`), `phone_number_details`, `carrier` (`{id, name, mvno}`), `sim_swap`, `device_swap` and `live_call` are accepted when present; a wrong JSON type, a `carrier` without a non-empty string `id`, or a `carrier.id` that does not match the carrier sign-off signer (`carrier:<id>`), is `MALFORMED`. Record `sim_swap` / `device_swap` carry `age_band` `{from, to}` in hours (`-1` unknown) and omit `checked_at` — `iat` is the authoritative check time.
 - Keys come only from `<baseURL>/.well-known/us/jwks.json` (it carries both regions' record keys), cached per `Cache-Control` (300 s default); nothing in the token picks a URL. Only Glide's record-signing kids are accepted. Glide keeps a retired record key published for at least 90 days (the default `MaxAuditAge`); a record whose key has since been unpublished fails `UNKNOWN_KEY`, even with `AllowExpired`.
 - Set `ExpectedAudience` to the record audience you configured in the developer portal (empty checks your client ID). To pin the device origin, set `ExpectedOrigin` (a list): the record's canonical `origin` must equal one entry exactly, else `ORIGIN_MISMATCH`; Link records carry `UNKNOWN`, so leave `UNKNOWN` out of the list to reject them.
 - To audit a stored record after `exp`, set `AllowExpired`; `iat` must still be within `MaxAuditAge` (90 days by default) and revoked kids (`RevokedKIDs` plus the built-in list) are always rejected. `Issuer` overrides the expected `iss` (default: the base URL).
 - In v1 `Claims.SignOffs` holds one `carrier` entry with status `unavailable`; `SignOffResults` reports it as `unavailable`, and a present sign-off would be reported `unverified`, never trusted.
 - `ctx` bounds the JWKS fetch. A fetch that ends because `ctx` was cancelled fails with `UNKNOWN_KEY` without starting the 60 s refresh backoff that a real fetch failure does.
+- `Claims.Factors` lists the factors that passed (`["carrier"]` when the record omits `factors`, `["passkey","carrier"]` on a verified step-up, `["passkey"]` on a passkey sign-in). A passkey-only record has no carrier sign-off; any other record needs exactly one. `Claims.ActionHash` is set only on a verified step-up.
+
+### Step-up (passkey + carrier)
+
+Approve a specific action with both a passkey and the carrier. Prepare with the passkey origin and the action:
+
+```go
+action := map[string]string{"type": "transfer", "amount": "250.00", "currency": "USD", "to": "acct_123"}
+prep, err := client.Prepare(ctx, &magicalauth.PrepareRequest{
+    PhoneNumber: "+14155551234",
+    UseCase:     magicalauth.UseCaseVerifyPhoneNumber,
+    ClientInfo:  magicalauth.ClientInfo{UserAgent: reqUserAgent},
+    Options: &magicalauth.PrepareOptions{
+        Passkey: &magicalauth.PasskeyOption{Enabled: true, Origin: "https://app.example.com"},
+        StepUp:  &magicalauth.StepUpOption{Action: action},
+    },
+})
+// prep.Passkey.PublicKey goes to the browser's WebAuthn get(); prep.StepUp.ActionHash == magicalauth.ActionHash(action)
+```
+
+On verify, forward the browser's assertion JSON string as `PasskeyAssertion`. The response adds `Passkey: "used"` and `StepUp` (`Passkey`, `Carrier`, `ActionHash`). Before executing the action, check the record:
+
+```go
+rec, err := client.VerifyStepUp(ctx, resp.VerificationRecord, action, "+14155551234", 0)
+```
+
+`VerifyStepUp` accepts the record past `exp` while `iat` is within `maxAge` (5 minutes when zero; an older record fails with `EXPIRED` even before `exp`), and fails with `STEP_UP_REJECTED` unless it is verified, has both the `passkey` and `carrier` factors, its `action_hash` equals `ActionHash(action)` (keys sorted, `key=value` joined by `|`, base64url SHA-256) and `sub` is `tel:<phoneNumber>`.
+If you configured a custom record audience, pass it as the trailing `expectedAudience` argument.
+
+- A record is not single-use: store `rec.Claims.Jti` and refuse a record whose `jti` you have already accepted before executing the action.
+- Plain `VerifyVerificationRecord` also accepts passkey-only records (`factors: ["passkey"]`); to require a carrier verification, check that `Claims.Factors` contains `"carrier"`.
+- `Claims.Strategy` can be `PASSKEY`.
+
+### Delete passkeys
+
+Sign a user out of passkeys on one of your registered origins. Your backend vouches for the user; Glide checks only that the origin is registered to this application.
+
+```go
+resp, err := client.DeletePasskeys(ctx, &magicalauth.DeletePasskeysRequest{
+    PhoneNumber: "+14155551234",
+    Origin:      "https://app.example.com",
+})
+// resp.DeletedCredentialIDs
+```
+
+Returns the deleted credential ids (empty when there were none); pass each to the web SDK's `PasskeyClient.signalUnknownCredential(rpId, id)` so the browser drops it. Errors: `VALIDATION_ERROR`, `FORBIDDEN` (origin not registered), `BAD_REQUEST` (passkeys not enabled, or the scope was refused), `SERVICE_UNAVAILABLE`.
 
 ### GetPhoneNumber
 
@@ -250,17 +296,17 @@ fmt.Printf("Phone: %s\n", resp.PhoneNumber)
 | `AgeBand` | `string` | When the SIM last changed, e.g. `"0-4 hours"`, `"7-14 days"`, `"more than 3 years"`, `"older than query window"`, `"temporarily unavailable"`, `"not available"`. |
 | `CarrierName` | `string` | The carrier that performed the check. |
 | `CheckedAt` | `string` | When the check ran, RFC3339. Kept as a string — the SDK passes the wire value through without parsing. |
-| `Swapped` | `*bool` | Whether a swap fell inside `MaxAgeHours`. **`nil` when the carrier gave no determinable answer** (T-Mobile codes `999` / `NA`) — that is not the same as `false`. |
+| `Swapped` | `*bool` | Whether a swap fell inside `MaxAgeHours`. **`nil` when the carrier gave no determinable answer** — that is not the same as `false`. |
 | `MaxAgeHours` | `int` | The window this answer actually describes. |
 | `Reason` | `SimSwapFailureReason` | Only when `Checked` is `false`: `timeout`, `carrier_not_supported`, `disabled`, `error`. |
 
 #### DeviceSwapInfo
 
-Device (IMEI) change, reported only by carriers that support it — currently T-Mobile. It is a fully independent signal, not a variant of `SimSwapInfo`: identical fields **except that it has no `Reason`**, because the server never populates one.
+Device (IMEI) change, reported only by carriers that support it. It is a fully independent signal, not a variant of `SimSwapInfo`: identical fields **except that it has no `Reason`**, because the server never populates one.
 
 #### Reading the swap window
 
-A `nil` `Swapped` means the check was inconclusive — the carrier gave no determinable age. `RiskLevelUnknown` is broader: it covers that inconclusive case **and** a CAMARA carrier successfully confirming no swap inside the window, which returns `Swapped` pointing at `false` and `AgeBand` `"older than query window"` but still grades `RiskLevelUnknown`, because the carrier never dated the last swap. That second case used to report `RiskLevelLow`, so code reading `Low` as "safe" now falls through to its default. Branch on `Swapped` for "was there a swap in my window"; read `RiskLevelUnknown` as "no risk grade available", not as a good or bad outcome.
+A `nil` `Swapped` means the check was inconclusive — the carrier gave no determinable age. `RiskLevelUnknown` is broader. A carrier that answers only whether the line changed inside the window, and confirms it did not, returns `Swapped` pointing at `false` and `AgeBand` `"older than query window"`, and that undated answer is graded by the window. When `MaxAgeHours` is **720 (30 days) or more** it grades `RiskLevelLow`, because any swap is at least that old. Below 720 it grades `RiskLevelUnknown`, because the carrier never dated the last swap, so code reading `Low` as "safe" falls through to its default; set `SimSwapMaxAgeHours` to 720 or more to get a grade for a clean line. Branch on `Swapped` for "was there a swap in my window"; read `RiskLevelUnknown` as "no risk grade available", not as a good or bad outcome.
 
 A known `age_band` together with `Swapped` pointing at `false` is not a contradiction: it means the carrier dated the last swap and it fell outside the window. The flag is the band overlapped with the window, and a band straddling the boundary resolves to swapped rather than to an unknown — so with a 24-hour window a `"14-30 days"` band gives `*Swapped == false` alongside `RiskLevelMedium`, because risk comes from the band's own recency, not from the window.
 
@@ -320,6 +366,43 @@ resp, err := client.ReportInvocation(ctx, &magicalauth.ReportInvocationRequest{
 })
 ```
 
+### Verify a caller on a phone call
+
+Prepare with `options.call.called_number` and `authentication_strategy` `call`, deliver the returned `data.url` to the caller's phone over your own SMS, RCS or IVR, poll `CheckStatus` for `stage` and `live_call`, then verify with `credential` set to the session key. `live_call.status` `active` means a recent call from the caller to the called number, not proof the call is still connected.
+
+```go
+prep, err := client.Prepare(ctx, &magicalauth.PrepareRequest{
+    PhoneNumber:            "+12125550100",
+    Nonce:                  "base64url-nonce",
+    UseCase:                magicalauth.UseCaseVerifyPhoneNumber,
+    AuthenticationStrategy: string(magicalauth.StrategyCall),
+    ClientInfo:             magicalauth.ClientInfo{UserAgent: "contact-center-backend/1.0"},
+    Options: &magicalauth.PrepareOptions{
+        Call: &magicalauth.CallOptions{CalledNumber: "+12125550199"},
+    },
+})
+if err != nil {
+    return err
+}
+var callData magicalauth.CallStrategyData
+if err := json.Unmarshal(prep.Data, &callData); err != nil {
+    return err
+}
+// deliver callData.URL; poll for stage and live_call:
+status, err := client.CheckStatus(ctx, prep.Session.SessionKey)
+if err != nil {
+    return err
+}
+verify, err := client.VerifyPhoneNumber(ctx, &magicalauth.VerifyPhoneNumberRequest{
+    Session:    prep.Session,
+    Credential: prep.Session.SessionKey,
+})
+if err != nil {
+    return err
+}
+_, _, _, _, _ = callData.URL, status.Stage, status.LiveCall, verify.Verified, verify.LiveCall
+```
+
 ## Error Handling
 
 Use Go's `errors.Is()` and `errors.As()` for error handling:
@@ -358,6 +441,7 @@ if err != nil {
 | `ErrCarrierNotEligible` | Carrier not supported |
 | `ErrCarrierRejected` | Carrier rejected a device-bound (link/desktop) auth; see `APIError.Details` for `carrier_error` / `carrier_error_description` / `stage` / `error_code` |
 | `ErrCarrierAppUnavailable` | Desktop (QR): the phone that scanned the code has no working carrier app (missing, off or outdated); terminal for the session, start a new QR |
+| `ErrCarrierTemporarilyUnavailable` | Transient carrier outage (HTTP 422, code `CARRIER_TEMPORARILY_UNAVAILABLE`); retryable — wait `APIError.RetryAfter` seconds and try again |
 | `ErrUnsupportedPlatform` | Platform not supported |
 | `ErrPhoneNumberMismatch` | Phone number doesn't match |
 | `ErrInvalidCredential` | Invalid credential format |

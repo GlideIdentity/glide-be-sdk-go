@@ -45,7 +45,7 @@ func checkRecordClaims(payload []byte, want recordExpectations) (*VerificationRe
 	if err != nil {
 		return nil, err
 	}
-	signOffs, err := checkClaimShape(obj, iat, exp)
+	signOffs, factors, err := checkClaimShape(obj, iat, exp)
 	if err != nil {
 		return nil, err
 	}
@@ -53,10 +53,12 @@ func checkRecordClaims(payload []byte, want recordExpectations) (*VerificationRe
 	r := newMemberReader(obj)
 	claims := &VerificationRecordClaims{
 		Ver: recordVersion, Iss: iss, Aud: aud, Iat: iat, Nbf: iat, Exp: exp, Verified: verified, SignOffs: signOffs,
+		Factors: factors, ActionHash: r.str("action_hash"),
 		Jti: r.str("jti"), Nonce: r.str("nonce"), UseCase: r.str("use_case"), Sub: r.str("sub"),
 		Origin: r.str("origin"), Strategy: r.str("strategy"),
 		PhoneNumberDetails: readPhoneNumberDetails(r), Carrier: readCarrier(r), BiometricVerification: BiometricVerification(r.str("biometric_verification")),
 		SimSwap: readSwap(r, "sim_swap"), DeviceSwap: readSwap(r, "device_swap"),
+		LiveCall: readLiveCall(r, "live_call"),
 	}
 	if !r.ok {
 		return nil, recordError(VerificationRecordCodeMalformed, "claims have the wrong JSON types")

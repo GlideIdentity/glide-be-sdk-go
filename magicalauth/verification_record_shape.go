@@ -15,40 +15,79 @@ const (
 
 // checkClaimShape enforces the v1 claim contract in its fixed order. iat and
 // exp are already bounded by the time checks, so iat+n cannot overflow.
-func checkClaimShape(obj recordObject, iat, exp int64) ([]VerificationRecordSignOff, error) {
+func checkClaimShape(obj recordObject, iat, exp int64) ([]VerificationRecordSignOff, []string, error) {
 	if _, ok := jsonBool(obj["verified"]); !ok {
-		return nil, recordError(VerificationRecordCodeMalformed, "verified must be a boolean")
+		return nil, nil, recordError(VerificationRecordCodeMalformed, "verified must be a boolean")
 	}
 	for _, name := range []string{"jti", "nonce", "sub"} {
 		if s, ok := jsonString(obj[name]); !ok || s == "" {
-			return nil, recordError(VerificationRecordCodeMalformed, name+" must be a non-empty string")
+			return nil, nil, recordError(VerificationRecordCodeMalformed, name+" must be a non-empty string")
 		}
 	}
 	if sub, _ := jsonString(obj["sub"]); !strings.HasPrefix(sub, "tel:+") {
-		return nil, recordError(VerificationRecordCodeMalformed, "sub must be tel:+E164")
+		return nil, nil, recordError(VerificationRecordCodeMalformed, "sub must be tel:+E164")
 	}
 	for _, name := range []string{"origin", "biometric_verification"} {
 		if _, ok := jsonString(obj[name]); !ok {
-			return nil, recordError(VerificationRecordCodeMalformed, name+" must be a string")
+			return nil, nil, recordError(VerificationRecordCodeMalformed, name+" must be a string")
 		}
 	}
 	if nbf, ok := jsonInt(obj["nbf"]); !ok || nbf != iat {
-		return nil, recordError(VerificationRecordCodeMalformed, "nbf must equal iat")
+		return nil, nil, recordError(VerificationRecordCodeMalformed, "nbf must equal iat")
 	}
 	if s, ok := jsonString(obj["use_case"]); !ok || s != recordUseCase {
-		return nil, recordError(VerificationRecordCodeMalformed, "use_case must be "+recordUseCase)
+		return nil, nil, recordError(VerificationRecordCodeMalformed, "use_case must be "+recordUseCase)
 	}
 	if exp < iat+1 || exp > iat+recordMaxLifetime {
-		return nil, recordError(VerificationRecordCodeMalformed, "exp must be 1 to 60 seconds after iat")
+		return nil, nil, recordError(VerificationRecordCodeMalformed, "exp must be 1 to 60 seconds after iat")
 	}
 	signOffs, ok := readSignOffs(obj["sign_offs"])
 	if !ok {
-		return nil, recordError(VerificationRecordCodeMalformed, "sign_offs must be an array of well-formed entries")
+		return nil, nil, recordError(VerificationRecordCodeMalformed, "sign_offs must be an array of well-formed entries")
+	}
+	factors, ok := readFactors(obj)
+	if !ok {
+		return nil, nil, recordError(VerificationRecordCodeMalformed, "factors must be an array of strings")
+	}
+	if len(factors) == 1 && factors[0] == "passkey" {
+		if hasCarrierSignOff(signOffs) {
+			return nil, nil, recordError(VerificationRecordCodeMalformed, "a passkey-only record must have no carrier sign-off")
+		}
+		return signOffs, factors, nil
 	}
 	if !oneCarrierSignOff(signOffs) {
-		return nil, recordError(VerificationRecordCodeMalformed, "sign_offs must have exactly one carrier:<id> carrier entry")
+		return nil, nil, recordError(VerificationRecordCodeMalformed, "sign_offs must have exactly one carrier:<id> carrier entry")
 	}
-	return signOffs, nil
+	return signOffs, factors, nil
+}
+
+func readFactors(obj recordObject) ([]string, bool) {
+	raw, present := obj["factors"]
+	if !present {
+		return []string{"carrier"}, true
+	}
+	var entries []json.RawMessage
+	if !isJSONArray(raw) || json.Unmarshal(raw, &entries) != nil {
+		return nil, false
+	}
+	factors := make([]string, 0, len(entries))
+	for _, e := range entries {
+		s, ok := jsonString(e)
+		if !ok {
+			return nil, false
+		}
+		factors = append(factors, s)
+	}
+	return factors, true
+}
+
+func hasCarrierSignOff(signOffs []VerificationRecordSignOff) bool {
+	for _, s := range signOffs {
+		if s.Role == signOffRoleCarrier {
+			return true
+		}
+	}
+	return false
 }
 
 // readSignOffs requires a JSON array of well-formed sign-off objects.

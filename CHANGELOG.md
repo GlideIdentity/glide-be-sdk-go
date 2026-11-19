@@ -5,6 +5,33 @@ All notable changes to the Magic Auth Go SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [3.2.1] - 2026-11-18
+
+### Added
+
+- **Call authentication**: `StrategyCall` (`"call"`) authentication strategy and `ProtocolCall` protocol; `PrepareOptions.Call` (`*CallOptions` with `CalledNumber`); prepare returns `CallStrategyData` (`URL`, `StatusURL`) in `Data`. `StatusResponse` carries `Stage` and `LiveCall`; `VerifyPhoneNumberResponse.LiveCall` reports the live-call check (`LiveCallInfo`: `Checked`, `Status`, optional `CarrierName`, `CheckedAt`, `Reason`). Signed verification records accept optional `live_call` claims (`VerificationRecordLiveCall`; `Status` is required when the claim is present). Companion sessions of a call verification carry `SessionMetadataParentStrategy` (`"parent_strategy"`) in session metadata.
+- Opt-in completion-page beacons via `GetCompletionPageHTML(endpoint, CompletionPageOptions{Beacon: true})`. Default is off and matches the pre-beacon page. When on: `page_start` / `invalid_link` / `post_outcome` / `close` / `tab_survived` to `window.location.pathname`, never `agg_code`; `/complete` JSON is parsed only on non-2xx; `close` sends `close_outcome` (`unknown` | `failed`) and `trigger` (`pagehide` | `visibilitychange` | `timeout`), never `close_succeeded`; `tab_survived` fires at most once after `close` if the tab becomes visible again; the close hint reappears on that visible return.
+- Added `biometric` (`available` | `unavailable`) on the prepare response and on eligibility requirements.
+- **Passkey step-up**: `PrepareOptions.Passkey` / `StepUp`, `PrepareResponse.Passkey` / `StepUp`, `VerifyPhoneNumberRequest.PasskeyAssertion`, `VerifyPhoneNumberResponse.Passkey` / `StepUp`, `ActionHash`, and `Client.VerifyStepUp`, which fails with `VerificationRecordCodeStepUpRejected` (`STEP_UP_REJECTED`) unless the record is verified, carries the `passkey` and `carrier` factors, and matches the action and phone number.
+- **`VerificationRecordClaims.Factors` / `ActionHash`**: `Factors` defaults to `["carrier"]` when absent; a record with `factors: ["passkey"]` must have no carrier sign-off.
+- **`ErrCarrierTemporarilyUnavailable` / `CodeCarrierTemporarilyUnavailable`**: 422 `CARRIER_TEMPORARILY_UNAVAILABLE`, retryable after `RetryAfter`. It previously matched `ErrInternalServer` via `errors.Is`.
+
+### Fixed
+
+- Opt-in page beacons fall back to `fetch` keepalive when `sendBeacon` is missing, returns `false`, or throws.
+- `feCode` is returned when a passkey prepare falls back to Link; set the binding cookie for `fallback.session`.
+- `StrategyPasskey` (`"passkey"`) authentication strategy.
+- `RetryAfter` falls back to `details.retry_after_seconds` when the `Retry-After` header is absent.
+- A 429 with no known body code is `ErrRateLimit` instead of `ErrInternalServer`.
+- Token endpoint: a 5xx or `temporarily_unavailable` maps to `ErrServiceUnavailable` and a 429 to `ErrRateLimit`, instead of `ErrBadRequest` / `ErrUnauthorized`.
+- Token 429 sets `RetryAfter` from `Retry-After`; negative `details.retry_after_seconds` is ignored.
+
+### Changed
+
+- Documented that an undated no-swap answer grades LOW at a window of 720 hours or more and UNKNOWN below that; dated answers keep their band grading.
+
 ## [3.2.0] - 2026-10-08
 
 ### Added

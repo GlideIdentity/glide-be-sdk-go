@@ -206,13 +206,27 @@ func ClearStaleBindingCookies(cookieHeader string, opts *BindingCookieOptions) [
 // suspended while the App Clip is in the foreground and must still find the
 // signal when it resumes. The FE SDK removes them on consume; the page only
 // erases them after 10 minutes as a fallback.
-func GetCompletionPageHTML(completeEndpoint string) (string, error) {
+//
+// Pass CompletionPageOptions{Beacon: true} to also emit same-origin JSON beacons
+// (page_start, invalid_link, post_outcome, close, tab_survived) to window.location.pathname.
+// Default is off. Beacons never include agg_code. close reports close_outcome
+// (unknown | failed) and never close_succeeded.
+func GetCompletionPageHTML(completeEndpoint string, opts ...CompletionPageOptions) (string, error) {
 	if !strings.HasPrefix(completeEndpoint, "/") || strings.HasPrefix(completeEndpoint, "//") {
 		return "", fmt.Errorf(
 			"magicauth: completeEndpoint must be a relative path starting with \"/\" (e.g., \"/api/glide/complete\"); " +
 				"cross-origin and protocol-relative endpoints are not supported")
 	}
-	return buildCompletionHTML(completeEndpoint), nil
+	beacon := false
+	if len(opts) > 0 {
+		beacon = opts[0].Beacon
+	}
+	return buildCompletionHTML(completeEndpoint, beacon), nil
+}
+
+// CompletionPageOptions configures GetCompletionPageHTML.
+type CompletionPageOptions struct {
+	Beacon bool
 }
 
 func validateSessionKey(sessionKey string) error {
@@ -256,7 +270,214 @@ func validateCookieOpts(o BindingCookieOptions) error {
 // buildCompletionHTML returns the full HTML for the completion redirect page.
 // The completeEndpoint is safely interpolated as a JSON string inside the JS
 // using json.Marshal to handle all edge cases (control chars, unicode, etc.).
-func buildCompletionHTML(completeEndpoint string) string {
+func completionPageScript(safeEndpoint string, beacon bool) string {
+	if !beacon {
+		return `(async function() {
+  var fragment = new URLSearchParams(window.location.hash.substring(1));
+  var aggCode = fragment.get('agg_code');
+  var sessionKey = fragment.get('session_key');
+
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+
+  if (!aggCode || !sessionKey) {
+    showError('Invalid verification link', ['This verification link is not valid.', 'Please go back and try again.'], 'link');
+    return;
+  }
+
+  try {
+    var res = await fetch(` + safeEndpoint + `, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agg_code: aggCode, session_key: sessionKey, user_agent: navigator.userAgent })
+    });
+
+    if (res.ok) {
+      var signalKey = 'glide_signal_' + sessionKey;
+      var sigmetaKey = 'glide_sigmeta_' + sessionKey;
+      var signalStored = false;
+      try {
+        localStorage.setItem(signalKey, sessionKey);
+        signalStored = true;
+        localStorage.setItem(sigmetaKey, String(Date.now()));
+      } catch(e) {}
+      if (signalStored) {
+        setTimeout(function() {
+          try { localStorage.removeItem(signalKey); localStorage.removeItem(sigmetaKey); } catch(e) {}
+        }, 600000);
+      }
+      tryClose();
+    } else {
+      var code = '';
+      try { var data = await res.json(); code = (data && (data.code || data.error)) || ''; } catch (_) {}
+      var err = friendlyError(code);
+      showError(err.title, err.points, err.illust);
+    }
+  } catch (e) {
+    showError('Connection issue', ['We could not reach the server.', 'Check your internet connection and try again.'], 'wifi');
+  }
+
+  function friendlyError(code) {
+    switch (code) {
+      case 'MISSING_BINDING_COOKIE':
+      case 'BROWSER_MISMATCH':
+        return { title: 'Open in your default browser', points: ['Carrier verification must be started from your default browser.', 'The redirect will always open in your default browser to complete.'], illust: 'browser' };
+      default:
+        return { title: 'Verification could not be completed', points: ['Something went wrong during verification.', 'Please go back and try again.'], illust: 'retry' };
+    }
+  }
+
+  function tryClose() {
+    document.querySelector('.spinner').classList.add('hidden');
+    window.close();
+    try { window.open('', '_self').close(); } catch(e) {}
+    setTimeout(function() {
+      document.getElementById('hint').textContent = 'You may close this tab.';
+      document.getElementById('hint').classList.remove('hidden');
+    }, 300);
+  }`
+	}
+	return `(async function() {
+  var fragment = new URLSearchParams(window.location.hash.substring(1));
+  var aggCode = fragment.get('agg_code');
+  var sessionKey = fragment.get('session_key');
+  var closeSent = false;
+  var survivedSent = false;
+  var closeTrigger = '';
+  var hiddenAt = 0;
+
+  function pageFields() {
+    var o = { has_agg_code: !!aggCode, has_session_key: !!sessionKey };
+    if (sessionKey && /^[A-Za-z0-9_-]{1,64}$/.test(sessionKey)) o.session_key = sessionKey;
+    return o;
+  }
+
+  function sendPageBeacon(event, extra) {
+    try {
+      var payload = Object.assign({ event: event }, pageFields(), extra || {});
+      var url = window.location.pathname;
+      var body = JSON.stringify(payload);
+      try {
+        if (navigator.sendBeacon && navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))) return;
+      } catch (e) {}
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: body,
+        keepalive: true,
+        credentials: 'same-origin'
+      }).catch(function() {});
+    } catch (e) {}
+  }
+
+  function showCloseHint() {
+    document.getElementById('hint').textContent = 'You may close this tab.';
+    document.getElementById('hint').classList.remove('hidden');
+  }
+
+  sendPageBeacon('page_start');
+
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+
+  if (!aggCode || !sessionKey) {
+    sendPageBeacon('invalid_link');
+    showError('Invalid verification link', ['This verification link is not valid.', 'Please go back and try again.'], 'link');
+    return;
+  }
+
+  try {
+    var res = await fetch(` + safeEndpoint + `, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agg_code: aggCode, session_key: sessionKey, user_agent: navigator.userAgent })
+    });
+
+    var outcome = { ok: !!res.ok, status: res.status };
+    if (res.ok) {
+      sendPageBeacon('post_outcome', outcome);
+      var signalKey = 'glide_signal_' + sessionKey;
+      var sigmetaKey = 'glide_sigmeta_' + sessionKey;
+      var signalStored = false;
+      try {
+        localStorage.setItem(signalKey, sessionKey);
+        signalStored = true;
+        localStorage.setItem(sigmetaKey, String(Date.now()));
+      } catch(e) {}
+      if (signalStored) {
+        setTimeout(function() {
+          try { localStorage.removeItem(signalKey); localStorage.removeItem(sigmetaKey); } catch(e) {}
+        }, 600000);
+      }
+      tryClose();
+    } else {
+      var code = '';
+      try { var data = await res.json(); var raw = data && (data.code || data.error); if (typeof raw === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(raw)) { code = raw; outcome.code = raw; } } catch (_) {}
+      sendPageBeacon('post_outcome', outcome);
+      var err = friendlyError(code);
+      showError(err.title, err.points, err.illust);
+    }
+  } catch (e) {
+    sendPageBeacon('post_outcome', { ok: false, status: 0 });
+    showError('Connection issue', ['We could not reach the server.', 'Check your internet connection and try again.'], 'wifi');
+  }
+
+  function friendlyError(code) {
+    switch (code) {
+      case 'MISSING_BINDING_COOKIE':
+      case 'BROWSER_MISMATCH':
+        return { title: 'Open in your default browser', points: ['Carrier verification must be started from your default browser.', 'The redirect will always open in your default browser to complete.'], illust: 'browser' };
+      default:
+        return { title: 'Verification could not be completed', points: ['Something went wrong during verification.', 'Please go back and try again.'], illust: 'retry' };
+    }
+  }
+
+  function reportClose(trigger) {
+    if (closeSent) return;
+    closeSent = true;
+    closeTrigger = trigger;
+    sendPageBeacon('close', {
+      close_outcome: (trigger === 'timeout' && document.visibilityState === 'visible') ? 'failed' : 'unknown',
+      trigger: trigger,
+      visibility_state: document.visibilityState
+    });
+  }
+
+  function reportTabSurvived() {
+    if (!closeSent || survivedSent) return;
+    survivedSent = true;
+    var hiddenMs = hiddenAt ? Date.now() - hiddenAt : 0;
+    if (hiddenMs < 0) hiddenMs = 0;
+    sendPageBeacon('tab_survived', { hidden_ms: hiddenMs, trigger: closeTrigger });
+  }
+
+  function tryClose() {
+    document.querySelector('.spinner').classList.add('hidden');
+    if ((document.hidden || document.visibilityState === 'hidden') && !hiddenAt) hiddenAt = Date.now();
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'visible') {
+        showCloseHint();
+        reportTabSurvived();
+        hiddenAt = 0;
+        return;
+      }
+      if (!hiddenAt) hiddenAt = Date.now();
+      reportClose('visibilitychange');
+    });
+    window.addEventListener('pagehide', function() {
+      if (!hiddenAt) hiddenAt = Date.now();
+      reportClose('pagehide');
+    });
+    window.close();
+    try { window.open('', '_self').close(); } catch(e) {}
+    setTimeout(function() {
+      reportClose('timeout');
+      if (document.visibilityState === 'visible') showCloseHint();
+    }, 300);
+  }`
+}
+
+func buildCompletionHTML(completeEndpoint string, beacon bool) string {
 	safeBytes, _ := json.Marshal(completeEndpoint)
 	safeEndpoint := string(safeBytes) // includes surrounding quotes, e.g. "/api/complete"
 
@@ -327,71 +548,7 @@ func buildCompletionHTML(completeEndpoint string) string {
   <div class="badge">Action required</div>
 </div>
 <script>
-(async function() {
-  var fragment = new URLSearchParams(window.location.hash.substring(1));
-  var aggCode = fragment.get('agg_code');
-  var sessionKey = fragment.get('session_key');
-
-  window.history.replaceState(null, '', window.location.pathname + window.location.search);
-
-  if (!aggCode || !sessionKey) {
-    showError('Invalid verification link', ['This verification link is not valid.', 'Please go back and try again.'], 'link');
-    return;
-  }
-
-  try {
-    var res = await fetch(` + safeEndpoint + `, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agg_code: aggCode, session_key: sessionKey, user_agent: navigator.userAgent })
-    });
-
-    if (res.ok) {
-      var signalKey = 'glide_signal_' + sessionKey;
-      var sigmetaKey = 'glide_sigmeta_' + sessionKey;
-      var signalStored = false;
-      try {
-        localStorage.setItem(signalKey, sessionKey);
-        signalStored = true;
-        localStorage.setItem(sigmetaKey, String(Date.now()));
-      } catch(e) {}
-      if (signalStored) {
-        setTimeout(function() {
-          try { localStorage.removeItem(signalKey); localStorage.removeItem(sigmetaKey); } catch(e) {}
-        }, 600000);
-      }
-      tryClose();
-    } else {
-      var code = '';
-      try { var data = await res.json(); code = (data && (data.code || data.error)) || ''; } catch (_) {}
-      var err = friendlyError(code);
-      showError(err.title, err.points, err.illust);
-    }
-  } catch (e) {
-    showError('Connection issue', ['We could not reach the server.', 'Check your internet connection and try again.'], 'wifi');
-  }
-
-  function friendlyError(code) {
-    switch (code) {
-      case 'MISSING_BINDING_COOKIE':
-      case 'BROWSER_MISMATCH':
-        return { title: 'Open in your default browser', points: ['Carrier verification must be started from your default browser.', 'The redirect will always open in your default browser to complete.'], illust: 'browser' };
-      default:
-        return { title: 'Verification could not be completed', points: ['Something went wrong during verification.', 'Please go back and try again.'], illust: 'retry' };
-    }
-  }
-
-  function tryClose() {
-    document.querySelector('.spinner').classList.add('hidden');
-    window.close();
-    try { window.open('', '_self').close(); } catch(e) {}
-    setTimeout(function() {
-      document.getElementById('hint').textContent = 'You may close this tab.';
-      document.getElementById('hint').classList.remove('hidden');
-    }, 300);
-  }
-
+` + completionPageScript(safeEndpoint, beacon) + `
   function showError(title, points, illust) {
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('err-title').textContent = title;

@@ -2,8 +2,11 @@ package magicalauth
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
+
+var e164Pattern = regexp.MustCompile(`^\+[1-9]\d{6,14}$`)
 
 // validateEligibilityRequest validates an EligibilityRequest before sending to the API.
 // At least one of phone_number or plmn is required, and client_info.user_agent is
@@ -64,6 +67,20 @@ func (c *Client) validateGetPhoneRequest(req *GetPhoneNumberRequest) error {
 	}
 	if req.Credential == "" {
 		return ErrMissingCredential
+	}
+	return nil
+}
+
+// validateDeletePasskeysRequest requires an E.164 phone_number and an origin.
+func (c *Client) validateDeletePasskeysRequest(req *DeletePasskeysRequest) error {
+	if req == nil {
+		return ErrNilRequest
+	}
+	if !e164Pattern.MatchString(req.PhoneNumber) {
+		return fmt.Errorf("%w: phone_number must be E.164", ErrValidation)
+	}
+	if req.Origin == "" {
+		return fmt.Errorf("%w: origin is required", ErrValidation)
 	}
 	return nil
 }

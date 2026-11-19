@@ -110,6 +110,17 @@ func readPhoneNumberDetails(r *memberReader) *PhoneNumberDetails {
 	return d
 }
 
+func readLiveCall(r *memberReader, name string) *VerificationRecordLiveCall {
+	obj := r.object(name)
+	if obj == nil {
+		return nil
+	}
+	s := newMemberReader(obj)
+	info := &VerificationRecordLiveCall{Status: s.str("status"), CarrierName: s.str("carrier_name"), Reason: s.str("reason")}
+	r.ok = r.ok && s.ok && info.Status != ""
+	return info
+}
+
 func readSwap(r *memberReader, name string) *VerificationRecordSwap {
 	obj := r.object(name)
 	if obj == nil {

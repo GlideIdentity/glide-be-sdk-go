@@ -20,6 +20,8 @@ const (
 	StrategyTS43    AuthenticationStrategy = "ts43"
 	StrategyLink    AuthenticationStrategy = "link"
 	StrategyDesktop AuthenticationStrategy = "desktop"
+	StrategyPasskey AuthenticationStrategy = "passkey"
+	StrategyCall    AuthenticationStrategy = "call"
 )
 
 // ProtocolType represents the protocol used for authentication.
@@ -29,6 +31,7 @@ const (
 	ProtocolTS43    ProtocolType = "ts43"
 	ProtocolLink    ProtocolType = "link"
 	ProtocolDesktop ProtocolType = "desktop"
+	ProtocolCall    ProtocolType = "call"
 )
 
 // SessionStatus represents the status of a verification session.
@@ -148,6 +151,41 @@ type PrepareOptions struct {
 	// when omitted the aggregator falls back to the first registered URL, so the
 	// browser can land on another deployment's completion page.
 	CompletionRedirectURL string `json:"completion_redirect_url,omitempty"`
+
+	// Passkey requests a passkey challenge for Origin; required with StepUp.
+	Passkey *PasskeyOption `json:"passkey,omitempty"`
+	// StepUp binds the session to Action; verify with Client.VerifyStepUp.
+	StepUp *StepUpOption `json:"step_up,omitempty"`
+	Call   *CallOptions  `json:"call,omitempty"`
+}
+
+// PasskeyOption enables the passkey factor on prepare.
+type PasskeyOption struct {
+	Enabled bool   `json:"enabled"`
+	Origin  string `json:"origin"`
+}
+
+// StepUpOption is the action a step-up session approves.
+type StepUpOption struct {
+	Action map[string]string `json:"action"`
+}
+
+// PasskeyChallenge is the WebAuthn challenge returned by a passkey prepare.
+type PasskeyChallenge struct {
+	ChallengeKey string          `json:"challenge_key"`
+	PublicKey    json.RawMessage `json:"public_key"`
+}
+
+// StepUpPrepared echoes the hash of the action a step-up session is bound to.
+type StepUpPrepared struct {
+	ActionHash string `json:"action_hash"`
+}
+
+// StepUpResult reports which step-up factors passed on verify.
+type StepUpResult struct {
+	Passkey    bool   `json:"passkey"`
+	Carrier    bool   `json:"carrier"`
+	ActionHash string `json:"action_hash"`
 }
 
 // NetworkOrigin is the server-observed network origin of a prepare request.
@@ -186,6 +224,9 @@ type NetworkCheck struct {
 	DesktopIP   string `json:"desktop_ip,omitempty"`
 	CompanionIP string `json:"companion_ip,omitempty"`
 }
+
+// SessionMetadataParentStrategy is session metadata on companion sessions of a call verification.
+const SessionMetadataParentStrategy = "parent_strategy"
 
 // SessionInfo contains session information from the API.
 type SessionInfo struct {
@@ -237,6 +278,26 @@ type DCQLCredential struct {
 type DCQLCredentialMeta struct {
 	VctValues                  []string `json:"vct_values"`
 	CredentialAuthorizationJWT string   `json:"credential_authorization_jwt"`
+}
+
+// CallOptions configures a call authentication prepare.
+type CallOptions struct {
+	CalledNumber string `json:"called_number"`
+}
+
+// CallStrategyData is returned when authentication_strategy is call.
+type CallStrategyData struct {
+	URL       string `json:"url"`
+	StatusURL string `json:"status_url"`
+}
+
+// LiveCallInfo is the live-call check outcome on status and verify responses.
+type LiveCallInfo struct {
+	Checked     bool   `json:"checked"`
+	Status      string `json:"status"`
+	CarrierName string `json:"carrier_name,omitempty"`
+	CheckedAt   string `json:"checked_at,omitempty"`
+	Reason      string `json:"reason,omitempty"`
 }
 
 // LinkStrategyData contains Link/OAuth strategy data for Verizon authentication.
@@ -305,6 +366,7 @@ type Requirements struct {
 	AndroidMinVersion *int    `json:"android_min_version,omitempty"` // e.g. 14
 	AndroidMinSDK     *int    `json:"android_min_sdk,omitempty"`     // e.g. 34
 	IOSMinVersion     *int    `json:"ios_min_version,omitempty"`     // e.g. 14
+	Biometric         *string `json:"biometric,omitempty"`           // "available" | "unavailable"
 
 	// Extra holds any fields not modeled above (forward-compat).
 	Extra map[string]any `json:"-"`
@@ -321,7 +383,7 @@ func (r *Requirements) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &all); err != nil {
 		return err
 	}
-	for _, k := range []string{"target", "android_min_version", "android_min_sdk", "ios_min_version"} {
+	for _, k := range []string{"target", "android_min_version", "android_min_sdk", "ios_min_version", "biometric"} {
 		delete(all, k)
 	}
 	if len(all) > 0 {
@@ -411,10 +473,24 @@ type PrepareResponse struct {
 	// empty string here — preserving the privacy-by-default contract.
 	CarrierName string `json:"carrier_name,omitempty"`
 
+	// Biometric is "available" or "unavailable" on a TS43 prepare from an
+	// Android client; empty otherwise. "unavailable" means Android Chrome below
+	// 156, where biometric is never requested; verify returns UNSUPPORTED if biometric was requested at prepare.
+	Biometric string `json:"biometric,omitempty"`
+
 	// RequestID is the id of this request, the same value as the X-Request-ID
 	// response header. Quote it to Glide support. Empty from servers older than
 	// the release that added it. The session this creates is Session.SessionKey.
 	RequestID string `json:"request_id,omitempty"`
+
+	Passkey *PasskeyChallenge `json:"passkey,omitempty"`
+	StepUp  *StepUpPrepared   `json:"step_up,omitempty"`
+
+	Fallback *PrepareResponse `json:"fallback,omitempty"`
+
+	// PasskeyEnrolment is true when the prepare asked for passkeys and a carrier
+	// success on this session will return VerifyPhoneNumberResponse.PasskeyEnrolment.
+	PasskeyEnrolment bool `json:"passkey_enrolment,omitempty"`
 }
 
 // VerifyPhoneNumberRequest is the request for verifying a phone number.
@@ -425,6 +501,8 @@ type VerifyPhoneNumberRequest struct {
 	// Signature is a base64-encoded DER ECDSA signature for native device binding.
 	// The native app signs "{session_key}:{credential}" with its SE/TEE private key.
 	Signature string `json:"signature,omitempty"`
+	// PasskeyAssertion is the WebAuthn assertion JSON from the browser; required on a step-up session.
+	PasskeyAssertion string `json:"passkey_assertion,omitempty"`
 }
 
 // BiometricVerification is the device biometric outcome, shared by the verify
@@ -449,9 +527,10 @@ type VerifyPhoneNumberResponse struct {
 	Nonce string `json:"nonce,omitempty"`
 	Aud   string `json:"aud,omitempty"`
 	// BiometricVerification equals the record's biometric_verification claim.
-	BiometricVerification BiometricVerification `json:"biometric_verification"`
+	BiometricVerification BiometricVerification `json:"biometric_verification,omitempty"`
 	SimSwap               *SimSwapInfo          `json:"sim_swap,omitempty"`
 	DeviceSwap            *DeviceSwapInfo       `json:"device_swap,omitempty"`
+	LiveCall              *LiveCallInfo         `json:"live_call,omitempty"`
 	NetworkCheck          *NetworkCheck         `json:"network_check,omitempty"`
 	PhoneNumberDetails    *PhoneNumberDetails   `json:"phone_number_details,omitempty"`
 	// VerificationRecord is the Glide-signed compact JWS of this result. Check it
@@ -468,6 +547,12 @@ type VerifyPhoneNumberResponse struct {
 	// response header. Quote it to Glide support. Empty from servers older than
 	// the release that added it.
 	RequestID string `json:"request_id,omitempty"`
+
+	Passkey string        `json:"passkey,omitempty"`
+	StepUp  *StepUpResult `json:"step_up,omitempty"`
+	// PasskeyEnrolment carries WebAuthn creation options after a carrier
+	// verification on a prepare that asked for passkeys; forward it to the browser.
+	PasskeyEnrolment *PasskeyChallenge `json:"passkey_enrolment,omitempty"`
 }
 
 // GetPhoneNumberRequest is the request for retrieving a phone number.
@@ -487,7 +572,7 @@ type GetPhoneNumberResponse struct {
 	// release that added it.
 	Nonce                 string                `json:"nonce,omitempty"`
 	Aud                   string                `json:"aud,omitempty"`
-	BiometricVerification BiometricVerification `json:"biometric_verification"`
+	BiometricVerification BiometricVerification `json:"biometric_verification,omitempty"`
 	SimSwap               *SimSwapInfo          `json:"sim_swap,omitempty"`
 	DeviceSwap            *DeviceSwapInfo       `json:"device_swap,omitempty"`
 	NetworkCheck          *NetworkCheck         `json:"network_check,omitempty"`
@@ -536,6 +621,8 @@ type StatusResponse struct {
 	DeviceInfo     *DeviceInfo            `json:"device_info,omitempty"`
 	GraceExpiresAt string                 `json:"grace_expires_at,omitempty"`
 	ScannedAt      string                 `json:"scanned_at,omitempty"`
+	Stage          string                 `json:"stage,omitempty"`
+	LiveCall       *LiveCallInfo          `json:"live_call,omitempty"`
 	Extra          map[string]interface{} `json:"extra,omitempty"` // Additional metadata (e.g., error reason)
 	// RequestID is the id of this request, the same value as the X-Request-ID
 	// response header. Quote it to Glide support. Empty from servers older than
@@ -568,8 +655,9 @@ type PrepareResult struct {
 	PrepareResponse
 
 	// FeCode is the frontend binding code (64-char hex).
-	// Only populated when the strategy is "link".
-	// The caller MUST set this as an HttpOnly cookie using BuildSetBindingCookieHeader.
+	// Populated when the strategy or its fallback is "link". The caller MUST set it as an
+	// HttpOnly cookie for the link session (Fallback.Session when the fallback is link)
+	// using BuildSetBindingCookieHeader.
 	FeCode string `json:"-"`
 }
 
@@ -635,6 +723,18 @@ type errorResponse struct {
 	SpanID     string         `json:"span_id,omitempty"`
 	Service    string         `json:"service,omitempty"`
 	Details    map[string]any `json:"details,omitempty"`
+}
+
+// DeletePasskeysRequest selects the passkeys to delete: every one for PhoneNumber on Origin.
+type DeletePasskeysRequest struct {
+	PhoneNumber string `json:"phone_number"`
+	Origin      string `json:"origin"`
+}
+
+// DeletePasskeysResponse lists the deleted credential ids; empty when there were none.
+type DeletePasskeysResponse struct {
+	DeletedCredentialIDs []string `json:"deleted_credential_ids"`
+	RequestID            string   `json:"request_id,omitempty"`
 }
 
 // oauthError is the OAuth2 error response.

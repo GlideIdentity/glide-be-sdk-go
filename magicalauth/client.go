@@ -20,6 +20,7 @@ const (
 	pathReportInvoke = "/magic-auth/v2/auth/report-invocation"
 	pathStatus       = "/magic-auth/v2/auth/status/"
 	pathStatusPublic = "/public/status/"
+	pathDeleteKeys   = "/magic-auth/v2/auth/delete-passkeys"
 )
 
 // Client is the Magic Auth API client.
@@ -73,8 +74,9 @@ func (c *Client) CheckEligibility(ctx context.Context, req *EligibilityRequest, 
 //
 // For link protocol sessions, Prepare automatically generates a device binding
 // fe_code and includes its SHA-256 hash in the request. The fe_code is returned in
-// PrepareResult.FeCode so the caller can set it as an HttpOnly cookie via
-// BuildSetBindingCookieHeader.
+// PrepareResult.FeCode when the strategy or its fallback is link, so the caller can
+// set it as an HttpOnly cookie for the link session (Fallback.Session when the
+// fallback is link) via BuildSetBindingCookieHeader.
 //
 // Returns strategy-specific data (TS43, Link, or Desktop) based on carrier and platform.
 func (c *Client) Prepare(ctx context.Context, req *PrepareRequest, opts ...*RequestOptions) (*PrepareResult, error) {
@@ -115,11 +117,15 @@ func (c *Client) Prepare(ctx context.Context, req *PrepareRequest, opts ...*Requ
 	result := &PrepareResult{PrepareResponse: resp}
 
 	// Only expose fe_code for link strategy (device binding is link-only)
-	if resp.AuthenticationStrategy == StrategyLink {
+	link := &resp
+	if resp.AuthenticationStrategy != StrategyLink && resp.Fallback != nil {
+		link = resp.Fallback
+	}
+	if link.AuthenticationStrategy == StrategyLink {
 		// If the server returned an fe_code in the link data (because we didn't
 		// send fe_hash, or for backward compat), prefer the server's code.
 		var linkData LinkStrategyData
-		if err := json.Unmarshal(resp.Data, &linkData); err == nil && linkData.FeCode != "" {
+		if err := json.Unmarshal(link.Data, &linkData); err == nil && linkData.FeCode != "" {
 			result.FeCode = linkData.FeCode
 		} else {
 			result.FeCode = feCode
@@ -230,6 +236,25 @@ func (c *Client) ReportInvocation(ctx context.Context, req *ReportInvocationRequ
 		return nil, err
 	}
 
+	return &resp, nil
+}
+
+// DeletePasskeys deletes every passkey Glide holds for the number on origin, a registered origin of this application.
+func (c *Client) DeletePasskeys(ctx context.Context, req *DeletePasskeysRequest, opts ...*RequestOptions) (*DeletePasskeysResponse, error) {
+	if err := c.validateDeletePasskeysRequest(req); err != nil {
+		return nil, err
+	}
+	var resp DeletePasskeysResponse
+	var reqOpts *RequestOptions
+	if len(opts) > 0 {
+		reqOpts = opts[0]
+	}
+	if err := c.doRequestOpts(ctx, http.MethodPost, pathDeleteKeys, req, &resp, reqOpts); err != nil {
+		return nil, err
+	}
+	if resp.DeletedCredentialIDs == nil {
+		resp.DeletedCredentialIDs = []string{}
+	}
 	return &resp, nil
 }
 

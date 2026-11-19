@@ -3,6 +3,8 @@ package magicalauth
 import (
 	"errors"
 	"fmt"
+	"net/http"
+	"strconv"
 )
 
 // Sentinel errors for common error conditions.
@@ -26,22 +28,23 @@ var (
 	ErrBlankPhoneNumber    = errors.New("magicauth: phone_numbers must not contain blank entries")
 
 	// API errors (match API error codes)
-	ErrBadRequest            = errors.New("magicauth: bad request")
-	ErrUnauthorized          = errors.New("magicauth: unauthorized")
-	ErrForbidden             = errors.New("magicauth: forbidden")
-	ErrSessionNotFound       = errors.New("magicauth: session not found")
-	ErrCarrierNotEligible    = errors.New("magicauth: carrier not eligible")
-	ErrCarrierRejected       = errors.New("magicauth: carrier rejected the authentication request")
-	ErrCarrierAppUnavailable = errors.New("magicauth: carrier app unavailable on the phone that scanned the QR code")
-	ErrUnsupportedPlatform   = errors.New("magicauth: unsupported platform")
-	ErrPhoneNumberMismatch   = errors.New("magicauth: phone number mismatch")
-	ErrInvalidCredential     = errors.New("magicauth: invalid credential format")
-	ErrBrowserMismatch       = errors.New("magicauth: browser mismatch")
-	ErrSessionNotEligible    = errors.New("magicauth: session not eligible")
-	ErrSessionExpired        = errors.New("magicauth: session expired")
-	ErrRateLimit             = errors.New("magicauth: rate limit exceeded")
-	ErrInternalServer        = errors.New("magicauth: internal server error")
-	ErrServiceUnavailable    = errors.New("magicauth: service unavailable")
+	ErrBadRequest                    = errors.New("magicauth: bad request")
+	ErrUnauthorized                  = errors.New("magicauth: unauthorized")
+	ErrForbidden                     = errors.New("magicauth: forbidden")
+	ErrSessionNotFound               = errors.New("magicauth: session not found")
+	ErrCarrierNotEligible            = errors.New("magicauth: carrier not eligible")
+	ErrCarrierRejected               = errors.New("magicauth: carrier rejected the authentication request")
+	ErrCarrierAppUnavailable         = errors.New("magicauth: carrier app unavailable on the phone that scanned the QR code")
+	ErrCarrierTemporarilyUnavailable = errors.New("magicauth: carrier temporarily unavailable, retry later")
+	ErrUnsupportedPlatform           = errors.New("magicauth: unsupported platform")
+	ErrPhoneNumberMismatch           = errors.New("magicauth: phone number mismatch")
+	ErrInvalidCredential             = errors.New("magicauth: invalid credential format")
+	ErrBrowserMismatch               = errors.New("magicauth: browser mismatch")
+	ErrSessionNotEligible            = errors.New("magicauth: session not eligible")
+	ErrSessionExpired                = errors.New("magicauth: session expired")
+	ErrRateLimit                     = errors.New("magicauth: rate limit exceeded")
+	ErrInternalServer                = errors.New("magicauth: internal server error")
+	ErrServiceUnavailable            = errors.New("magicauth: service unavailable")
 
 	// Device binding errors (SDK-side validation)
 	ErrDeviceBindingFailed  = errors.New("magicauth: device binding validation failed")
@@ -52,27 +55,28 @@ var (
 type ErrorCode string
 
 const (
-	CodeBadRequest               ErrorCode = "BAD_REQUEST"
-	CodeUnauthorized             ErrorCode = "UNAUTHORIZED"
-	CodeForbidden                ErrorCode = "FORBIDDEN"
-	CodeValidationError          ErrorCode = "VALIDATION_ERROR"
-	CodeMissingParameters        ErrorCode = "MISSING_PARAMETERS"
-	CodeSessionNotFound          ErrorCode = "SESSION_NOT_FOUND"
-	CodeInvalidVerification      ErrorCode = "INVALID_VERIFICATION"
-	CodeCarrierNotEligible       ErrorCode = "CARRIER_NOT_ELIGIBLE"
-	CodeCarrierRejected          ErrorCode = "CARRIER_REJECTED"
-	CodeCarrierAppUnavailable    ErrorCode = "CARRIER_APP_UNAVAILABLE"
-	CodeUnsupportedPlatform      ErrorCode = "UNSUPPORTED_PLATFORM"
-	CodePhoneNumberMismatch      ErrorCode = "PHONE_NUMBER_MISMATCH"
-	CodeInvalidCredential        ErrorCode = "INVALID_CREDENTIAL_FORMAT" // #nosec G101 -- error code, not a credential
-	CodeAudienceValidationFailed ErrorCode = "AUDIENCE_VALIDATION_FAILED"
-	CodeBrowserMismatch          ErrorCode = "BROWSER_MISMATCH"
-	CodeQRAlreadyScanned         ErrorCode = "QR_ALREADY_SCANNED"
-	CodeSessionNotEligible       ErrorCode = "SESSION_NOT_ELIGIBLE"
-	CodeSessionExpired           ErrorCode = "SESSION_EXPIRED"
-	CodeRateLimitExceeded        ErrorCode = "RATE_LIMIT_EXCEEDED"
-	CodeInternalServerError      ErrorCode = "INTERNAL_SERVER_ERROR"
-	CodeServiceUnavailable       ErrorCode = "SERVICE_UNAVAILABLE"
+	CodeBadRequest                    ErrorCode = "BAD_REQUEST"
+	CodeUnauthorized                  ErrorCode = "UNAUTHORIZED"
+	CodeForbidden                     ErrorCode = "FORBIDDEN"
+	CodeValidationError               ErrorCode = "VALIDATION_ERROR"
+	CodeMissingParameters             ErrorCode = "MISSING_PARAMETERS"
+	CodeSessionNotFound               ErrorCode = "SESSION_NOT_FOUND"
+	CodeInvalidVerification           ErrorCode = "INVALID_VERIFICATION"
+	CodeCarrierNotEligible            ErrorCode = "CARRIER_NOT_ELIGIBLE"
+	CodeCarrierRejected               ErrorCode = "CARRIER_REJECTED"
+	CodeCarrierAppUnavailable         ErrorCode = "CARRIER_APP_UNAVAILABLE"
+	CodeCarrierTemporarilyUnavailable ErrorCode = "CARRIER_TEMPORARILY_UNAVAILABLE"
+	CodeUnsupportedPlatform           ErrorCode = "UNSUPPORTED_PLATFORM"
+	CodePhoneNumberMismatch           ErrorCode = "PHONE_NUMBER_MISMATCH"
+	CodeInvalidCredential             ErrorCode = "INVALID_CREDENTIAL_FORMAT" // #nosec G101 -- error code, not a credential
+	CodeAudienceValidationFailed      ErrorCode = "AUDIENCE_VALIDATION_FAILED"
+	CodeBrowserMismatch               ErrorCode = "BROWSER_MISMATCH"
+	CodeQRAlreadyScanned              ErrorCode = "QR_ALREADY_SCANNED"
+	CodeSessionNotEligible            ErrorCode = "SESSION_NOT_ELIGIBLE"
+	CodeSessionExpired                ErrorCode = "SESSION_EXPIRED"
+	CodeRateLimitExceeded             ErrorCode = "RATE_LIMIT_EXCEEDED"
+	CodeInternalServerError           ErrorCode = "INTERNAL_SERVER_ERROR"
+	CodeServiceUnavailable            ErrorCode = "SERVICE_UNAVAILABLE"
 
 	// SDK-side error codes for device binding
 	CodeDeviceBindingFailed  ErrorCode = "DEVICE_BINDING_FAILED"
@@ -125,7 +129,7 @@ type APIError struct {
 	// (link/desktop) authentication was rejected by the carrier.
 	Details map[string]string
 
-	// RetryAfter is the number of seconds to wait before retrying (for rate limits)
+	// RetryAfter is the number of seconds to wait before retrying (for rate limits and temporary carrier unavailability)
 	RetryAfter int
 }
 
@@ -144,29 +148,30 @@ func (e *APIError) Unwrap() error {
 
 // errorCodeMap maps API error codes to sentinel errors for O(1) lookup.
 var errorCodeMap = map[ErrorCode]error{
-	CodeBadRequest:               ErrBadRequest,
-	CodeMissingParameters:        ErrBadRequest,
-	CodeUnauthorized:             ErrUnauthorized,
-	CodeForbidden:                ErrForbidden,
-	CodeValidationError:          ErrValidation,
-	CodeSessionNotFound:          ErrSessionNotFound,
-	CodeInvalidVerification:      ErrBadRequest,
-	CodeCarrierNotEligible:       ErrCarrierNotEligible,
-	CodeCarrierRejected:          ErrCarrierRejected,
-	CodeCarrierAppUnavailable:    ErrCarrierAppUnavailable,
-	CodeUnsupportedPlatform:      ErrUnsupportedPlatform,
-	CodePhoneNumberMismatch:      ErrPhoneNumberMismatch,
-	CodeInvalidCredential:        ErrInvalidCredential,
-	CodeAudienceValidationFailed: ErrValidation,
-	CodeBrowserMismatch:          ErrBrowserMismatch,
-	CodeQRAlreadyScanned:         ErrBadRequest,
-	CodeSessionNotEligible:       ErrSessionNotEligible,
-	CodeSessionExpired:           ErrSessionExpired,
-	CodeDeviceBindingFailed:      ErrDeviceBindingFailed,
-	CodeMissingBindingCookie:     ErrMissingBindingCookie,
-	CodeRateLimitExceeded:        ErrRateLimit,
-	CodeInternalServerError:      ErrInternalServer,
-	CodeServiceUnavailable:       ErrServiceUnavailable,
+	CodeBadRequest:                    ErrBadRequest,
+	CodeMissingParameters:             ErrBadRequest,
+	CodeUnauthorized:                  ErrUnauthorized,
+	CodeForbidden:                     ErrForbidden,
+	CodeValidationError:               ErrValidation,
+	CodeSessionNotFound:               ErrSessionNotFound,
+	CodeInvalidVerification:           ErrBadRequest,
+	CodeCarrierNotEligible:            ErrCarrierNotEligible,
+	CodeCarrierRejected:               ErrCarrierRejected,
+	CodeCarrierAppUnavailable:         ErrCarrierAppUnavailable,
+	CodeCarrierTemporarilyUnavailable: ErrCarrierTemporarilyUnavailable,
+	CodeUnsupportedPlatform:           ErrUnsupportedPlatform,
+	CodePhoneNumberMismatch:           ErrPhoneNumberMismatch,
+	CodeInvalidCredential:             ErrInvalidCredential,
+	CodeAudienceValidationFailed:      ErrValidation,
+	CodeBrowserMismatch:               ErrBrowserMismatch,
+	CodeQRAlreadyScanned:              ErrBadRequest,
+	CodeSessionNotEligible:            ErrSessionNotEligible,
+	CodeSessionExpired:                ErrSessionExpired,
+	CodeDeviceBindingFailed:           ErrDeviceBindingFailed,
+	CodeMissingBindingCookie:          ErrMissingBindingCookie,
+	CodeRateLimitExceeded:             ErrRateLimit,
+	CodeInternalServerError:           ErrInternalServer,
+	CodeServiceUnavailable:            ErrServiceUnavailable,
 }
 
 // codeToSentinel maps API error codes to sentinel errors.
@@ -208,6 +213,7 @@ const (
 	VerificationRecordCodeUnsupportedVersion = "UNSUPPORTED_VERSION"
 	VerificationRecordCodeRevokedKey         = "REVOKED_KEY"
 	VerificationRecordCodeRecordUnavailable  = "RECORD_UNAVAILABLE"
+	VerificationRecordCodeStepUpRejected     = "STEP_UP_REJECTED"
 )
 
 // VerificationRecordError is returned when a verification record fails
@@ -234,9 +240,21 @@ func recordError(code, message string) *VerificationRecordError {
 func newAPIError(resp *errorResponse, status int, retryAfter int) *APIError {
 	code := ErrorCode(resp.Code)
 	details := flattenErrorDetails(resp.Details)
+	if retryAfter == 0 {
+		if v, err := strconv.Atoi(details["retry_after_seconds"]); err == nil && v >= 0 {
+			retryAfter = v
+		}
+	}
+
+	sentinel := codeToSentinel(code)
+	// a known code keeps its type even when it maps to ErrInternalServer
+	if _, known := errorCodeMap[code]; status == http.StatusTooManyRequests && !known {
+		sentinel = ErrRateLimit
+		code = CodeRateLimitExceeded
+	}
 
 	return &APIError{
-		Err:        codeToSentinel(code),
+		Err:        sentinel,
 		Code:       code,
 		Message:    resp.Message,
 		Status:     status,
@@ -288,17 +306,19 @@ func flattenErrorDetails(raw map[string]any) map[string]string {
 }
 
 // newOAuthError creates an APIError from an OAuth error response.
-func newOAuthError(resp *oauthError, status int) *APIError {
+func newOAuthError(resp *oauthError, status int, retryAfter int) *APIError {
 	var sentinel error
 	var code ErrorCode
 
-	switch resp.Error {
-	case "invalid_client":
-		sentinel = ErrUnauthorized
-		code = CodeUnauthorized
+	switch {
+	case status == http.StatusTooManyRequests:
+		sentinel, code = ErrRateLimit, CodeRateLimitExceeded
+	case status >= http.StatusInternalServerError || resp.Error == "temporarily_unavailable":
+		sentinel, code = ErrServiceUnavailable, CodeServiceUnavailable
+	case status == http.StatusUnauthorized || resp.Error == "invalid_client":
+		sentinel, code = ErrUnauthorized, CodeUnauthorized
 	default:
-		sentinel = ErrBadRequest
-		code = CodeBadRequest
+		sentinel, code = ErrBadRequest, CodeBadRequest
 	}
 
 	message := resp.ErrorDescription
@@ -307,9 +327,10 @@ func newOAuthError(resp *oauthError, status int) *APIError {
 	}
 
 	return &APIError{
-		Err:     sentinel,
-		Code:    code,
-		Message: message,
-		Status:  status,
+		Err:        sentinel,
+		Code:       code,
+		Message:    message,
+		Status:     status,
+		RetryAfter: retryAfter,
 	}
 }
